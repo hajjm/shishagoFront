@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
-
-import 'app.dart';
+import 'bootstrap.dart';
+import 'config/app_environment.dart';
 
 void main() {
-  runApp(const ChichagoApp());
+  bootstrap(AppConfig.fromDefines().environment);
 }

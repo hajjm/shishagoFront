@@ -7,12 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class ChichagoApi {
   ChichagoApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      baseUrl =
-          baseUrl ??
-          const String.fromEnvironment(
-            'CHICHAGO_API_URL',
-            defaultValue: 'http://127.0.0.1:8000',
-          );
+      baseUrl = baseUrl ?? 'http://127.0.0.1:8000';
 
   final http.Client _client;
   final String baseUrl;

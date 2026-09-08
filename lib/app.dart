@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_environment.dart';
 import 'core/app_theme.dart';
 import 'data/app_store.dart';
 import 'features/auth/role_entry_page.dart';
@@ -13,10 +14,12 @@ import 'services/session_controller.dart';
 class ChichagoApp extends StatefulWidget {
   const ChichagoApp({
     super.key,
+    this.config = AppConfig.development,
     this.sessionController,
     this.skipRestore = false,
   });
 
+  final AppConfig config;
   final SessionController? sessionController;
   final bool skipRestore;
 
@@ -32,7 +35,9 @@ class _ChichagoAppState extends State<ChichagoApp> {
   @override
   void initState() {
     super.initState();
-    session = widget.sessionController ?? SessionController(ChichagoApi());
+    session =
+        widget.sessionController ??
+        SessionController(ChichagoApi(baseUrl: widget.config.apiBaseUrl));
     api = session.api;
     restoration = widget.skipRestore ? Future.value() : session.restore();
   }
@@ -49,7 +54,7 @@ class _ChichagoAppState extends State<ChichagoApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Chichago',
+      title: widget.config.environment.displayName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: FutureBuilder<void>(
