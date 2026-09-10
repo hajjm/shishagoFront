@@ -221,7 +221,7 @@ class ShishaGoApi {
     ).query;
     final response = await _send(
       'GET',
-      '/orders/export.csv${query.isEmpty ? '' : '?$query'}',
+      '/orders/export.xlsx${query.isEmpty ? '' : '?$query'}',
       authenticated: true,
     );
     _ensureSuccess(response);

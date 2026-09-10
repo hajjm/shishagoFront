@@ -138,7 +138,19 @@ class _HeroPanel extends StatelessWidget {
       children: [
         const BrandMark(light: true),
         const Spacer(),
-        const BrandLogo(size: 136),
+        Container(
+          width: 136,
+          height: 136,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: const Icon(
+            Icons.delivery_dining_rounded,
+            size: 86,
+            color: Colors.white,
+          ),
+        ),
         const SizedBox(height: 28),
         Text(
           'From our fire\nto your night.',

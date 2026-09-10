@@ -10,6 +10,8 @@ import '../models/app_models.dart';
 import '../services/shishago_api.dart';
 import '../services/session_controller.dart';
 
+const driverLocationUpdateInterval = Duration(seconds: 10);
+
 class ShishaGoStore extends ChangeNotifier {
   ShishaGoStore({required this.api, required this.session});
 
@@ -25,7 +27,9 @@ class ShishaGoStore extends ChangeNotifier {
   bool loading = false;
   String? error;
   final Map<String, int> _cart = {};
-  StreamSubscription<Position>? _locationSubscription;
+  Timer? _locationTimer;
+  String? _sharingOrderId;
+  bool _locationUpdateInProgress = false;
   StreamSubscription<dynamic>? _trackingSubscription;
   StreamSubscription<dynamic>? _notificationSubscription;
   WebSocketChannel? _trackingChannel;
@@ -201,8 +205,8 @@ class ShishaGoStore extends ChangeNotifier {
     await FileSaver.instance.saveFile(
       name: 'shishago-orders',
       bytes: bytes,
-      fileExtension: 'csv',
-      mimeType: MimeType.csv,
+      fileExtension: 'xlsx',
+      mimeType: MimeType.microsoftExcel,
     );
   }
 
@@ -248,36 +252,56 @@ class ShishaGoStore extends ChangeNotifier {
         permission == LocationPermission.deniedForever) {
       throw const ShishaGoApiException('Location permission is required', 403);
     }
-    await _locationSubscription?.cancel();
-    _locationSubscription =
-        Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          ),
-        ).listen((position) async {
-          try {
-            await api.updateDriverLocation(
-              orderId: order.id,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              heading: position.heading,
-              speed: position.speed,
-            );
-          } catch (_) {
-            // A later location update retries automatically.
-          }
-        });
+    _locationTimer?.cancel();
+    _sharingOrderId = order.id;
+    try {
+      await _sendDriverLocation(order);
+    } catch (_) {
+      _sharingOrderId = null;
+      rethrow;
+    }
+    _locationTimer = Timer.periodic(driverLocationUpdateInterval, (_) {
+      unawaited(_sendDriverLocation(order, ignoreErrors: true));
+    });
     notifyListeners();
   }
 
   Future<void> stopLocationSharing() async {
-    await _locationSubscription?.cancel();
-    _locationSubscription = null;
+    _locationTimer?.cancel();
+    _locationTimer = null;
+    _sharingOrderId = null;
     notifyListeners();
   }
 
-  bool get isSharingLocation => _locationSubscription != null;
+  Future<void> _sendDriverLocation(
+    AppOrder order, {
+    bool ignoreErrors = false,
+  }) async {
+    if (_locationUpdateInProgress || _sharingOrderId != order.id) return;
+    _locationUpdateInProgress = true;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      await api.updateDriverLocation(
+        orderId: order.id,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        heading: position.heading,
+        speed: position.speed,
+      );
+    } catch (_) {
+      if (!ignoreErrors) rethrow;
+    } finally {
+      _locationUpdateInProgress = false;
+    }
+  }
+
+  bool get isSharingLocation => _locationTimer != null;
+  String? get sharingOrderId => _sharingOrderId;
 
   void _listenForNotifications() {
     _notificationChannel = api.notificationUpdates();
@@ -347,7 +371,7 @@ class ShishaGoStore extends ChangeNotifier {
 
   @override
   void dispose() {
-    _locationSubscription?.cancel();
+    _locationTimer?.cancel();
     _trackingSubscription?.cancel();
     _notificationSubscription?.cancel();
     _trackingChannel?.sink.close();

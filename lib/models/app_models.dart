@@ -13,26 +13,26 @@ extension UserRoleValue on UserRole {
 
 enum ProductCategory { chicha, market }
 
-enum OrderStage { pending, accepted, pickedUp, onTheWay, completed, cancelled }
+enum OrderStage { pending, accepted, preparing, onTheWay, completed, cancelled }
 
 extension OrderStageLabel on OrderStage {
   String get label => switch (this) {
     OrderStage.pending => 'Pending',
     OrderStage.accepted => 'Accepted',
-    OrderStage.pickedUp => 'Picked up',
+    OrderStage.preparing => 'Preparing',
     OrderStage.onTheWay => 'On the way',
     OrderStage.completed => 'Completed',
     OrderStage.cancelled => 'Cancelled',
   };
 
   String get apiValue => switch (this) {
-    OrderStage.pickedUp => 'picked_up',
+    OrderStage.preparing => 'preparing',
     OrderStage.onTheWay => 'on_the_way',
     _ => name,
   };
 
   static OrderStage parse(String value) => switch (value) {
-    'picked_up' => OrderStage.pickedUp,
+    'preparing' || 'picked_up' => OrderStage.preparing,
     'on_the_way' => OrderStage.onTheWay,
     'completed' => OrderStage.completed,
     'cancelled' => OrderStage.cancelled,

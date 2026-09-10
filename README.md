@@ -20,7 +20,7 @@ and selects the client, owner, or driver experience from the authenticated serve
 - Client delivery addresses with a required, visibly confirmed GPS point
 - Chicha and market catalogs, cart, checkout, order history, and reorder
 - Live order status, driver coordinates, and driver phone details
-- Owner dashboard with order filtering, CSV export, catalog, client, and driver management
+- Owner dashboard with order filtering, Excel export with daily/monthly summaries, catalog, client, and driver management
 - Driver assignments, customer calling, live GPS sharing, and delivery status progression
 - Persisted notifications with live WebSocket refresh
 

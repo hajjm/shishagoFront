@@ -16,7 +16,7 @@ class OrderStatusPill extends StatelessWidget {
         Colors.blue.shade700,
         Icons.check_circle_outline_rounded,
       ),
-      OrderStage.pickedUp => (
+      OrderStage.preparing => (
         Colors.deepPurple.shade600,
         Icons.inventory_2_outlined,
       ),

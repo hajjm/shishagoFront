@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -24,35 +26,60 @@ class DriverDashboard extends StatefulWidget {
 }
 
 class _DriverDashboardState extends State<DriverDashboard> {
-  String? sharingOrderId;
+  String? selectedOrderId;
 
-  AppOrder? get activeOrder {
-    for (final order in widget.store.orders) {
-      if (order.stage != OrderStage.completed &&
-          order.stage != OrderStage.cancelled) {
-        return order;
-      }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ensureAutomaticLocationSharing());
+    });
+  }
+
+  List<AppOrder> get activeOrders => widget.store.orders
+      .where(
+        (order) => {
+          OrderStage.accepted,
+          OrderStage.preparing,
+          OrderStage.onTheWay,
+        }.contains(order.stage),
+      )
+      .toList();
+
+  AppOrder? selectedOrder(List<AppOrder> orders) {
+    if (orders.isEmpty) return null;
+    for (final order in orders) {
+      if (order.id == selectedOrderId) return order;
     }
-    return null;
+    return orders.first;
   }
 
   Future<void> refresh() async {
     try {
       await widget.store.refresh();
+      await ensureAutomaticLocationSharing();
     } catch (error) {
       showError(error);
     }
   }
 
-  Future<void> toggleLocation(bool enabled, AppOrder order) async {
+  Future<void> ensureAutomaticLocationSharing() async {
+    if (widget.store.isSharingLocation) return;
     try {
-      if (enabled) {
-        await widget.store.startLocationSharing(order);
-        sharingOrderId = order.id;
-      } else {
-        await widget.store.stopLocationSharing();
-        sharingOrderId = null;
+      for (final order in activeOrders) {
+        if (order.stage == OrderStage.onTheWay) {
+          await widget.store.startLocationSharing(order);
+          return;
+        }
       }
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  Future<void> retryLocation(AppOrder order) async {
+    try {
+      await widget.store.startLocationSharing(order);
       if (mounted) setState(() {});
     } catch (error) {
       showError(error);
@@ -61,17 +88,21 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   Future<void> advance(AppOrder order) async {
     final next = switch (order.stage) {
-      OrderStage.accepted => OrderStage.pickedUp,
-      OrderStage.pickedUp => OrderStage.onTheWay,
+      OrderStage.accepted => OrderStage.preparing,
+      OrderStage.preparing => OrderStage.onTheWay,
       OrderStage.onTheWay => OrderStage.completed,
       _ => null,
     };
     if (next == null) return;
     try {
       await widget.store.changeOrderStatus(order, next);
-      if (next == OrderStage.completed) {
+      if (next == OrderStage.onTheWay) {
+        await widget.store.startLocationSharing(order);
+      }
+      if (next == OrderStage.completed &&
+          widget.store.sharingOrderId == order.id) {
         await widget.store.stopLocationSharing();
-        sharingOrderId = null;
+        await ensureAutomaticLocationSharing();
       }
       if (mounted) setState(() {});
     } catch (error) {
@@ -83,6 +114,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final uri = Uri(scheme: 'tel', path: phone);
     if (!await launchUrl(uri)) {
       showError('Calling is not supported on this device');
+    }
+  }
+
+  Future<void> whatsappClient(AppOrder order) async {
+    final phone = order.clientPhone.replaceAll(RegExp(r'\D'), '');
+    final uri = Uri.https('wa.me', '/$phone', {
+      'text':
+          'Hello ${order.clientName}, this is your Shisha Go driver for order ${order.reference}.',
+    });
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      showError('WhatsApp could not be opened on this device');
     }
   }
 
@@ -98,7 +140,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return AnimatedBuilder(
       animation: widget.store,
       builder: (context, _) {
-        final order = activeOrder;
+        final assignments = activeOrders;
+        final order = selectedOrder(assignments);
         final completed = widget.store.orders
             .where((value) => value.stage == OrderStage.completed)
             .length;
@@ -138,21 +181,28 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     Text(
                       order == null
                           ? 'No active delivery assigned'
-                          : 'Your active delivery is ready',
+                          : '${assignments.length} active ${assignments.length == 1 ? 'delivery' : 'deliveries'} assigned',
                       style: const TextStyle(color: AppColors.muted),
                     ),
                     const SizedBox(height: 22),
                     if (order == null)
                       const _EmptyAssignment()
                     else ...[
+                      _AssignmentPicker(
+                        orders: assignments,
+                        selectedOrderId: order.id,
+                        onSelected: (orderId) =>
+                            setState(() => selectedOrderId = orderId),
+                      ),
+                      const SizedBox(height: 18),
                       _DeliveryCard(
                         order: order,
                         sharing:
                             widget.store.isSharingLocation &&
-                            sharingOrderId == order.id,
-                        onSharingChanged: (value) =>
-                            toggleLocation(value, order),
+                            order.stage == OrderStage.onTheWay,
+                        onRetryLocation: () => retryLocation(order),
                         onCall: () => callClient(order.clientPhone),
+                        onWhatsApp: () => whatsappClient(order),
                       ),
                       const SizedBox(height: 18),
                       _ProgressCard(
@@ -190,18 +240,122 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 }
 
+class _AssignmentPicker extends StatelessWidget {
+  const _AssignmentPicker({
+    required this.orders,
+    required this.selectedOrderId,
+    required this.onSelected,
+  });
+
+  final List<AppOrder> orders;
+  final String selectedOrderId;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Text(
+            'Assigned deliveries',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.ember.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '${orders.length} active',
+              style: const TextStyle(
+                color: AppColors.emberDark,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      SizedBox(
+        height: 100,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: orders.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 10),
+          itemBuilder: (context, index) {
+            final order = orders[index];
+            final selected = order.id == selectedOrderId;
+            return SizedBox(
+              width: 236,
+              child: Material(
+                color: selected
+                    ? AppColors.ember.withValues(alpha: 0.10)
+                    : AppColors.paper,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  side: BorderSide(
+                    color: selected ? AppColors.ember : AppColors.sand,
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => onSelected(order.id),
+                  child: Padding(
+                    padding: const EdgeInsets.all(13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                order.reference,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            OrderStatusPill(stage: order.stage),
+                          ],
+                        ),
+                        const Spacer(),
+                        Text(
+                          order.clientName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ],
+  );
+}
+
 class _DeliveryCard extends StatelessWidget {
   const _DeliveryCard({
     required this.order,
     required this.sharing,
-    required this.onSharingChanged,
+    required this.onRetryLocation,
     required this.onCall,
+    required this.onWhatsApp,
   });
 
   final AppOrder order;
   final bool sharing;
-  final ValueChanged<bool> onSharingChanged;
+  final VoidCallback onRetryLocation;
   final VoidCallback onCall;
+  final VoidCallback onWhatsApp;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -255,40 +409,76 @@ class _DeliveryCard extends StatelessWidget {
           color: AppColors.sage,
         ),
         const SizedBox(height: 18),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: SwitchListTile(
-            value: sharing,
-            onChanged: onSharingChanged,
-            activeThumbColor: AppColors.sage,
+        Material(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(16),
+          child: ListTile(
+            leading: Icon(
+              order.stage == OrderStage.onTheWay
+                  ? Icons.gps_fixed_rounded
+                  : Icons.storefront_rounded,
+              color: sharing ? AppColors.sage : Colors.white70,
+            ),
             title: Text(
-              sharing ? 'Live location is shared' : 'Share live location',
+              order.stage == OrderStage.onTheWay
+                  ? sharing
+                        ? 'Live location sharing is on'
+                        : 'Location sharing needs attention'
+                  : 'Driver is at the Shisha Go store',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            subtitle: const Text(
-              'The client receives your position during this delivery.',
-              style: TextStyle(color: Colors.white60),
+            subtitle: Text(
+              order.stage == OrderStage.onTheWay
+                  ? 'The client receives a fresh position every 10 seconds.'
+                  : 'Location sharing starts automatically after Preparing.',
+              style: const TextStyle(color: Colors.white60),
             ),
+            trailing: order.stage == OrderStage.onTheWay && !sharing
+                ? TextButton(
+                    onPressed: onRetryLocation,
+                    child: const Text('Retry'),
+                  )
+                : null,
           ),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white38),
-              padding: const EdgeInsets.symmetric(vertical: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white38),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: onCall,
+                icon: const Icon(Icons.phone_rounded),
+                label: const Text('Call'),
+              ),
             ),
-            onPressed: onCall,
-            icon: const Icon(Icons.phone_rounded),
-            label: Text('Call ${order.clientPhone}'),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF25D366),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                onPressed: onWhatsApp,
+                icon: const Icon(Icons.chat_rounded),
+                label: const Text('WhatsApp'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: Text(
+            order.clientPhone,
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
           ),
         ),
       ],
@@ -321,7 +511,7 @@ class _ProgressCard extends StatelessWidget {
           const SizedBox(height: 16),
           for (final step in const [
             OrderStage.accepted,
-            OrderStage.pickedUp,
+            OrderStage.preparing,
             OrderStage.onTheWay,
             OrderStage.completed,
           ])

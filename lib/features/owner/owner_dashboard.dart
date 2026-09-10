@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_theme.dart';
 import '../../data/app_store.dart';
@@ -19,6 +20,7 @@ class OwnerDashboard extends StatefulWidget {
 
 class _OwnerDashboardState extends State<OwnerDashboard> {
   int selectedIndex = 0;
+  bool menuExpanded = true;
 
   @override
   Widget build(BuildContext context) {
@@ -55,32 +57,81 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
           body: Row(
             children: [
               if (wide)
-                NavigationRail(
-                  minWidth: 88,
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (index) =>
-                      setState(() => selectedIndex = index),
-                  leading: const Padding(
-                    padding: EdgeInsets.only(bottom: 28),
-                    child: BrandLogo(size: 48),
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: AppColors.paper,
+                    border: Border(right: BorderSide(color: AppColors.sand)),
                   ),
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.receipt_long_outlined),
-                      selectedIcon: Icon(Icons.receipt_long_rounded),
-                      label: Text('Orders'),
+                  child: NavigationRail(
+                    extended: menuExpanded,
+                    minWidth: 80,
+                    minExtendedWidth: 224,
+                    backgroundColor: AppColors.paper,
+                    indicatorColor: AppColors.ember.withValues(alpha: 0.15),
+                    selectedIconTheme: const IconThemeData(
+                      color: AppColors.emberDark,
                     ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.inventory_2_outlined),
-                      selectedIcon: Icon(Icons.inventory_2_rounded),
-                      label: Text('Catalog'),
+                    selectedLabelTextStyle: const TextStyle(
+                      color: AppColors.emberDark,
+                      fontWeight: FontWeight.w800,
                     ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.people_outline_rounded),
-                      selectedIcon: Icon(Icons.people_rounded),
-                      label: Text('People'),
+                    unselectedLabelTextStyle: const TextStyle(
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: (index) =>
+                        setState(() => selectedIndex = index),
+                    leading: Padding(
+                      padding: const EdgeInsets.only(bottom: 22),
+                      child: Column(
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: menuExpanded
+                                ? const BrandMark(
+                                    key: ValueKey('expanded-brand'),
+                                    compact: true,
+                                  )
+                                : const BrandLogo(
+                                    key: ValueKey('compact-brand'),
+                                    size: 44,
+                                  ),
+                          ),
+                          const SizedBox(height: 14),
+                          IconButton.filledTonal(
+                            tooltip: menuExpanded
+                                ? 'Collapse menu'
+                                : 'Expand menu',
+                            onPressed: () =>
+                                setState(() => menuExpanded = !menuExpanded),
+                            icon: Icon(
+                              menuExpanded
+                                  ? Icons.keyboard_double_arrow_left_rounded
+                                  : Icons.keyboard_double_arrow_right_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.receipt_long_outlined),
+                        selectedIcon: Icon(Icons.receipt_long_rounded),
+                        label: Text('Orders'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.inventory_2_outlined),
+                        selectedIcon: Icon(Icons.inventory_2_rounded),
+                        label: Text('Catalog'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.people_outline_rounded),
+                        selectedIcon: Icon(Icons.people_rounded),
+                        label: Text('People'),
+                      ),
+                    ],
+                  ),
                 ),
               Expanded(
                 child: IndexedStack(index: selectedIndex, children: pages),
@@ -128,8 +179,12 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
   DateTime? toDate;
   bool newestFirst = true;
 
-  String? get statusFilter =>
-      filter == 'All' ? null : filter.toLowerCase().replaceAll(' ', '_');
+  String? get statusFilter => switch (filter) {
+    'All' => null,
+    'Preparing' => 'preparing',
+    'On the way' => 'on_the_way',
+    _ => filter.toLowerCase(),
+  };
 
   Future<void> applyFilters() => widget.store.filterOrders(
     status: statusFilter,
@@ -230,7 +285,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                 FilledButton.tonalIcon(
                   onPressed: export,
                   icon: const Icon(Icons.download_rounded),
-                  label: const Text('Export CSV'),
+                  label: const Text('Export Excel'),
                 ),
               ],
             ),
@@ -274,7 +329,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                           'All',
                           'Pending',
                           'Accepted',
-                          'Picked up',
+                          'Preparing',
                           'On the way',
                           'Completed',
                           'Cancelled',
@@ -598,6 +653,7 @@ Future<void> showProductEditor(
   final price = TextEditingController(text: product?.price.toString());
   var category = product?.category ?? ProductCategory.chicha;
   var available = product?.available ?? true;
+  String? priceError;
   await showDialog<void>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -619,8 +675,17 @@ Future<void> showProductEditor(
               const SizedBox(height: 10),
               TextField(
                 controller: price,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Price'),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [_priceInputFormatter],
+                onChanged: (_) {
+                  if (priceError != null) setState(() => priceError = null);
+                },
+                decoration: InputDecoration(
+                  labelText: 'Price',
+                  errorText: priceError,
+                ),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField(
@@ -651,7 +716,10 @@ Future<void> showProductEditor(
           FilledButton(
             onPressed: () async {
               final parsedPrice = double.tryParse(price.text);
-              if (parsedPrice == null) return;
+              if (parsedPrice == null || parsedPrice <= 0) {
+                setState(() => priceError = 'Enter a valid price');
+                return;
+              }
               await store.saveProduct(
                 existing: product,
                 name: name.text,
@@ -673,9 +741,24 @@ Future<void> showProductEditor(
   price.dispose();
 }
 
-class OwnerPeoplePage extends StatelessWidget {
+final _priceInputFormatter = TextInputFormatter.withFunction((
+  oldValue,
+  newValue,
+) {
+  final validPrice = RegExp(r'^\d*(?:\.\d{0,2})?$');
+  return validPrice.hasMatch(newValue.text) ? newValue : oldValue;
+});
+
+class OwnerPeoplePage extends StatefulWidget {
   const OwnerPeoplePage({super.key, required this.store});
   final ShishaGoStore store;
+
+  @override
+  State<OwnerPeoplePage> createState() => _OwnerPeoplePageState();
+}
+
+class _OwnerPeoplePageState extends State<OwnerPeoplePage> {
+  UserRole selectedRole = UserRole.client;
 
   Future<void> addDriver(BuildContext context) async {
     final name = TextEditingController();
@@ -706,7 +789,10 @@ class OwnerPeoplePage extends StatelessWidget {
           ),
           FilledButton(
             onPressed: () async {
-              await store.createDriver(name: name.text, phone: phone.text);
+              await widget.store.createDriver(
+                name: name.text,
+                phone: phone.text,
+              );
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Create'),
@@ -720,38 +806,75 @@ class OwnerPeoplePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: store,
-    builder: (context, _) => ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'People',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                  ),
-                  const Text(
-                    'Manage clients and drivers.',
-                    style: TextStyle(color: AppColors.muted),
-                  ),
-                ],
+    animation: widget.store,
+    builder: (context, _) {
+      final users = widget.store.users
+          .where((user) => user.role == selectedRole)
+          .toList();
+      final roleLabel = selectedRole == UserRole.client ? 'clients' : 'drivers';
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'People',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    Text(
+                      'Manage $roleLabel.',
+                      style: const TextStyle(color: AppColors.muted),
+                    ),
+                  ],
+                ),
               ),
+              if (selectedRole == UserRole.driver)
+                FilledButton.icon(
+                  onPressed: () => addDriver(context),
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: const Text('Add driver'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<UserRole>(
+              segments: const [
+                ButtonSegment(
+                  value: UserRole.client,
+                  icon: Icon(Icons.people_outline_rounded),
+                  label: Text('Clients'),
+                ),
+                ButtonSegment(
+                  value: UserRole.driver,
+                  icon: Icon(Icons.delivery_dining_outlined),
+                  label: Text('Drivers'),
+                ),
+              ],
+              selected: {selectedRole},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) =>
+                  setState(() => selectedRole = selection.first),
             ),
-            FilledButton.icon(
-              onPressed: () => addDriver(context),
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Add driver'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 22),
-        ...store.users
-            .where((user) => user.role != UserRole.owner)
-            .map(
+          ),
+          const SizedBox(height: 22),
+          if (users.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 56),
+              child: Center(
+                child: Text(
+                  'No $roleLabel yet.',
+                  style: const TextStyle(color: AppColors.muted),
+                ),
+              ),
+            )
+          else
+            ...users.map(
               (user) => Card(
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
@@ -770,12 +893,14 @@ class OwnerPeoplePage extends StatelessWidget {
                   subtitle: Text('${user.role.name} · ${user.phone}'),
                   trailing: Switch(
                     value: user.isActive,
-                    onChanged: (value) => store.setUserActive(user, value),
+                    onChanged: (value) =>
+                        widget.store.setUserActive(user, value),
                   ),
                 ),
               ),
             ),
-      ],
-    ),
+        ],
+      );
+    },
   );
 }

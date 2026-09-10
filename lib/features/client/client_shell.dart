@@ -496,6 +496,31 @@ class _TrackingPageState extends State<TrackingPage> {
     widget.store.watchTracking(widget.order);
   }
 
+  Future<void> callDriver(String phone) async {
+    final opened = await launchUrl(Uri(scheme: 'tel', path: phone));
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Calling is not supported on this device'),
+        ),
+      );
+    }
+  }
+
+  Future<void> whatsappDriver(AppOrder order, String phone) async {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    final uri = Uri.https('wa.me', '/$digits', {
+      'text':
+          'Hello, I am contacting you about Shisha Go order ${order.reference}.',
+    });
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('WhatsApp could not be opened')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
@@ -505,11 +530,16 @@ class _TrackingPageState extends State<TrackingPage> {
         (value) => value.id == widget.order.id,
         orElse: () => widget.order,
       );
+      final hasDriver = order.driverId != null;
+      final atStore =
+          hasDriver &&
+          {OrderStage.accepted, OrderStage.preparing}.contains(order.stage);
+      final driverPhone = tracking?.driverPhone ?? order.driverPhone;
       return ListView(
         padding: const EdgeInsets.all(20),
         children: [
           Text(
-            'Live delivery',
+            atStore ? 'Order tracking' : 'Live delivery',
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: 6),
@@ -546,14 +576,17 @@ class _TrackingPageState extends State<TrackingPage> {
                     color: AppColors.ink,
                   ),
                 ),
-                const Positioned(
-                  right: 78,
-                  top: 72,
-                  child: _MapPin(
-                    icon: Icons.delivery_dining_rounded,
-                    color: AppColors.ember,
+                if (hasDriver)
+                  Positioned(
+                    left: atStore ? 82 : null,
+                    bottom: atStore ? 48 : null,
+                    right: atStore ? null : 78,
+                    top: atStore ? null : 72,
+                    child: const _MapPin(
+                      icon: Icons.delivery_dining_rounded,
+                      color: AppColors.ember,
+                    ),
                   ),
-                ),
                 Positioned(
                   left: 18,
                   top: 18,
@@ -561,7 +594,11 @@ class _TrackingPageState extends State<TrackingPage> {
                     avatar: const Icon(Icons.gps_fixed_rounded, size: 17),
                     label: Text(
                       tracking?.latitude == null
-                          ? 'Waiting for driver GPS'
+                          ? !hasDriver
+                                ? 'Waiting for driver assignment'
+                                : atStore
+                                ? 'Driver is at the Shisha Go store'
+                                : 'Waiting for driver GPS'
                           : '${tracking!.latitude!.toStringAsFixed(5)}, ${tracking.longitude!.toStringAsFixed(5)}',
                     ),
                   ),
@@ -581,21 +618,37 @@ class _TrackingPageState extends State<TrackingPage> {
                 tracking?.driverName ?? order.driverName ?? 'Assigning driver',
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
-              subtitle: Text(tracking?.driverPhone ?? order.driverPhone ?? ''),
-              trailing: IconButton.filledTonal(
-                onPressed: order.driverPhone == null
-                    ? null
-                    : () => launchUrl(
-                        Uri(scheme: 'tel', path: order.driverPhone),
-                      ),
-                icon: const Icon(Icons.phone_rounded),
+              subtitle: Text(driverPhone ?? ''),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton.filledTonal(
+                    tooltip: 'Call driver',
+                    onPressed: driverPhone == null
+                        ? null
+                        : () => callDriver(driverPhone),
+                    icon: const Icon(Icons.phone_rounded),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton.filled(
+                    tooltip: 'WhatsApp driver',
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: driverPhone == null
+                        ? null
+                        : () => whatsappDriver(order, driverPhone),
+                    icon: const Icon(Icons.chat_rounded),
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(height: 14),
           for (final stage in [
             OrderStage.accepted,
-            OrderStage.pickedUp,
+            OrderStage.preparing,
             OrderStage.onTheWay,
             OrderStage.completed,
           ])
