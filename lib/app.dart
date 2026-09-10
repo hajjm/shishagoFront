@@ -10,6 +10,7 @@ import 'features/owner/owner_dashboard.dart';
 import 'models/app_models.dart';
 import 'services/chichago_api.dart';
 import 'services/session_controller.dart';
+import 'widgets/brand_mark.dart';
 
 class ChichagoApp extends StatefulWidget {
   const ChichagoApp({
@@ -135,8 +136,18 @@ class _LoadingPage extends StatelessWidget {
   const _LoadingPage();
 
   @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: CircularProgressIndicator()));
+  Widget build(BuildContext context) => const Scaffold(
+    body: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          BrandLogo(size: 112),
+          SizedBox(height: 24),
+          CircularProgressIndicator(),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ConnectionError extends StatelessWidget {

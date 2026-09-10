@@ -2,6 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
 
+/// The shared artwork used by every role and authentication screen.
+class BrandLogo extends StatelessWidget {
+  const BrandLogo({super.key, this.size = 48});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(size * 0.16),
+    child: Image.asset(
+      'assets/branding/chichago-logo.jpeg',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      semanticLabel: 'Chichago logo',
+      filterQuality: FilterQuality.high,
+    ),
+  );
+}
+
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.light = false, this.compact = false});
 
@@ -14,20 +34,7 @@ class BrandMark extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: compact ? 34 : 42,
-          height: compact ? 34 : 42,
-          decoration: BoxDecoration(
-            color: light
-                ? Colors.white.withValues(alpha: 0.16)
-                : AppColors.ember,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(
-            Icons.local_fire_department_rounded,
-            color: light ? Colors.white : Colors.white,
-          ),
-        ),
+        BrandLogo(size: compact ? 40 : 56),
         const SizedBox(width: 10),
         Text(
           'chichago',

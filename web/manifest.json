@@ -3,9 +3,9 @@
     "short_name": "Chichago",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FAF7EF",
+    "theme_color": "#713C16",
+    "description": "Chichago chicha and market delivery with live tracking.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

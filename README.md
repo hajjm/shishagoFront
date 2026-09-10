@@ -28,6 +28,9 @@ unknown live server.
 
 ## Run
 
+For complete first-time setup, daily startup commands, mobile devices, and
+troubleshooting, read [Starting Chichago locally](docs/START_FRONTEND_AND_BACKEND.md).
+
 Start `chichagoBack`, then:
 
 ```powershell

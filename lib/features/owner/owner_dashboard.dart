@@ -62,11 +62,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                       setState(() => selectedIndex = index),
                   leading: const Padding(
                     padding: EdgeInsets.only(bottom: 28),
-                    child: Icon(
-                      Icons.local_fire_department_rounded,
-                      color: AppColors.ember,
-                      size: 38,
-                    ),
+                    child: BrandLogo(size: 48),
                   ),
                   destinations: const [
                     NavigationRailDestination(
