@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-class ChichagoApi {
-  ChichagoApi({http.Client? client, String? baseUrl})
+class ShishaGoApi {
+  ShishaGoApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
       baseUrl = baseUrl ?? 'http://127.0.0.1:8001';
 
@@ -237,7 +237,7 @@ class ChichagoApi {
   Uri _webSocketUri(String path) {
     final token = accessToken;
     if (token == null) {
-      throw const ChichagoApiException('Not authenticated', 401);
+      throw const ShishaGoApiException('Not authenticated', 401);
     }
     final httpUri = Uri.parse('$baseUrl$path');
     return httpUri.replace(
@@ -284,7 +284,7 @@ class ChichagoApi {
     if (authenticated) {
       final token = accessToken;
       if (token == null) {
-        throw const ChichagoApiException('Not authenticated', 401);
+        throw const ShishaGoApiException('Not authenticated', 401);
       }
       headers['Authorization'] = 'Bearer $token';
     }
@@ -310,7 +310,7 @@ class ChichagoApi {
     } catch (_) {
       // The server returned a non-JSON error.
     }
-    throw ChichagoApiException(message, response.statusCode);
+    throw ShishaGoApiException(message, response.statusCode);
   }
 
   String _date(DateTime value) =>
@@ -319,8 +319,8 @@ class ChichagoApi {
   void close() => _client.close();
 }
 
-class ChichagoApiException implements Exception {
-  const ChichagoApiException(this.message, this.statusCode);
+class ShishaGoApiException implements Exception {
+  const ShishaGoApiException(this.message, this.statusCode);
 
   final String message;
   final int statusCode;

@@ -88,7 +88,7 @@ class _SignInPageState extends State<SignInPage> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Sign in with the WhatsApp number registered to your Chichago account.',
+            'Sign in with the WhatsApp number registered to your Shisha Go account.',
             style: TextStyle(color: AppColors.muted, height: 1.45),
           ),
           const SizedBox(height: 26),
@@ -134,7 +134,7 @@ class _SignInPageState extends State<SignInPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('New to Chichago?'),
+              const Text('New to Shisha Go?'),
               TextButton(
                 onPressed: widget.session.loading ? null : openSignUp,
                 child: const Text('Create an account'),

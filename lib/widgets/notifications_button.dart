@@ -6,7 +6,7 @@ import '../data/app_store.dart';
 class NotificationsButton extends StatelessWidget {
   const NotificationsButton({super.key, required this.store});
 
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(

@@ -13,7 +13,7 @@ import '../../widgets/order_widgets.dart';
 class ClientShell extends StatefulWidget {
   const ClientShell({super.key, required this.store, required this.session});
 
-  final ChichagoStore store;
+  final ShishaGoStore store;
   final SessionController session;
 
   @override
@@ -85,7 +85,7 @@ class _ClientShellState extends State<ClientShell> {
 class ShopPage extends StatefulWidget {
   const ShopPage({super.key, required this.store, required this.user});
 
-  final ChichagoStore store;
+  final ShishaGoStore store;
   final AppUser user;
 
   @override
@@ -300,7 +300,7 @@ class _ShopPageState extends State<ShopPage> {
 class ProductCard extends StatelessWidget {
   const ProductCard({super.key, required this.product, required this.store});
   final Product product;
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -386,7 +386,7 @@ class ProductCard extends StatelessWidget {
 
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key, required this.store});
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -482,7 +482,7 @@ class OrdersPage extends StatelessWidget {
 
 class TrackingPage extends StatefulWidget {
   const TrackingPage({super.key, required this.store, required this.order});
-  final ChichagoStore store;
+  final ShishaGoStore store;
   final AppOrder order;
 
   @override

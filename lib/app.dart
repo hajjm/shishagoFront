@@ -8,12 +8,12 @@ import 'features/client/client_shell.dart';
 import 'features/driver/driver_dashboard.dart';
 import 'features/owner/owner_dashboard.dart';
 import 'models/app_models.dart';
-import 'services/chichago_api.dart';
+import 'services/shishago_api.dart';
 import 'services/session_controller.dart';
 import 'widgets/brand_mark.dart';
 
-class ChichagoApp extends StatefulWidget {
-  const ChichagoApp({
+class ShishaGoApp extends StatefulWidget {
+  const ShishaGoApp({
     super.key,
     this.config = AppConfig.development,
     this.sessionController,
@@ -25,11 +25,11 @@ class ChichagoApp extends StatefulWidget {
   final bool skipRestore;
 
   @override
-  State<ChichagoApp> createState() => _ChichagoAppState();
+  State<ShishaGoApp> createState() => _ShishaGoAppState();
 }
 
-class _ChichagoAppState extends State<ChichagoApp> {
-  late final ChichagoApi api;
+class _ShishaGoAppState extends State<ShishaGoApp> {
+  late final ShishaGoApi api;
   late final SessionController session;
   late final Future<void> restoration;
 
@@ -38,7 +38,7 @@ class _ChichagoAppState extends State<ChichagoApp> {
     super.initState();
     session =
         widget.sessionController ??
-        SessionController(ChichagoApi(baseUrl: widget.config.apiBaseUrl));
+        SessionController(ShishaGoApi(baseUrl: widget.config.apiBaseUrl));
     api = session.api;
     restoration = widget.skipRestore ? Future.value() : session.restore();
   }
@@ -86,13 +86,13 @@ class _AuthenticatedHome extends StatefulWidget {
 }
 
 class _AuthenticatedHomeState extends State<_AuthenticatedHome> {
-  late final ChichagoStore store;
+  late final ShishaGoStore store;
   late final Future<void> initialization;
 
   @override
   void initState() {
     super.initState();
-    store = ChichagoStore(api: widget.session.api, session: widget.session);
+    store = ShishaGoStore(api: widget.session.api, session: widget.session);
     initialization = store.initialize();
   }
 
@@ -169,7 +169,7 @@ class _ConnectionError extends StatelessWidget {
               const Icon(Icons.cloud_off_rounded, size: 54),
               const SizedBox(height: 16),
               Text(
-                'Could not reach Chichago',
+                'Could not reach Shisha Go',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 8),

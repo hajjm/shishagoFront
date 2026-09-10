@@ -1,11 +1,11 @@
 {
-    "name": "Chichago",
-    "short_name": "Chichago",
+    "name": "Shisha Go",
+    "short_name": "Shisha Go",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FAF7EF",
     "theme_color": "#713C16",
-    "description": "Chichago chicha and market delivery with live tracking.",
+    "description": "Shisha Go chicha and market delivery with live tracking.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

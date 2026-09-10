@@ -16,7 +16,7 @@ class DriverDashboard extends StatefulWidget {
     required this.session,
   });
 
-  final ChichagoStore store;
+  final ShishaGoStore store;
   final SessionController session;
 
   @override
@@ -239,7 +239,7 @@ class _DeliveryCard extends StatelessWidget {
         const _RoutePoint(
           icon: Icons.storefront_rounded,
           label: 'PICK UP',
-          value: 'Chichago store',
+          value: 'Shisha Go store',
           color: AppColors.ember,
         ),
         Container(

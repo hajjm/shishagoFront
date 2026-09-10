@@ -5,5 +5,5 @@ import 'config/app_environment.dart';
 
 void bootstrap(AppEnvironment environment) {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(ChichagoApp(config: AppConfig.forEnvironment(environment)));
+  runApp(ShishaGoApp(config: AppConfig.forEnvironment(environment)));
 }

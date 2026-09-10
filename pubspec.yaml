@@ -1,5 +1,5 @@
-name: chichago
-description: "Chichago Flutter application."
+name: shishago
+description: "Shisha Go Flutter application."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -73,7 +73,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/branding/chichago-logo.jpeg
+    - assets/branding/shishago-logo.jpeg
 
   # To add assets to your application, add an assets section, like this:
   # assets:

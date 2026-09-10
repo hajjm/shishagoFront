@@ -1,6 +1,17 @@
-# chichagoFront
+# shishaGoFront
 
-Responsive Flutter client for Chichago. One codebase targets Android, iOS, and web
+Project name: `shishaGo`. Display name: **Shisha Go**. The Dart package is
+`shishago`, following Dart's lowercase naming requirements.
+
+This checkout remains at `C:\Users\LOQ\Documents\GitHub\chichagoFront`.
+The rename does not change saved project locations or Git remote URLs.
+Use `SHISHAGO_API_URL` and `SHISHAGO_ENV`; the previous `CHICHAGO_*` build
+defines remain supported as fallbacks. Native identifiers now use
+`com.shishago.app` (plus the environment suffix), so mobile builds install as
+the new app identity. Any external Firebase registrations or signing profiles
+must match that identifier before configuring those services.
+
+Responsive Flutter client for Shisha Go. One codebase targets Android, iOS, and web
 and selects the client, owner, or driver experience from the authenticated server role.
 
 ## Included flows
@@ -17,25 +28,27 @@ and selects the client, owner, or driver experience from the authenticated serve
 
 | Flavor | Dart entry point | Android application ID | iOS scheme |
 |---|---|---|---|
-| `dev` | `lib/main_dev.dart` | `com.chichago.app.dev` | `dev` |
-| `staging` | `lib/main_staging.dart` | `com.chichago.app.staging` | `staging` |
-| `prod` | `lib/main_prod.dart` | `com.chichago.app` | `prod` |
+| `dev` | `lib/main_dev.dart` | `com.shishago.app.dev` | `dev` |
+| `staging` | `lib/main_staging.dart` | `com.shishago.app.staging` | `staging` |
+| `prod` | `lib/main_prod.dart` | `com.shishago.app` | `prod` |
 
 Environment selection and API URLs are typed in `lib/config/app_environment.dart`.
-Pass `CHICHAGO_API_URL` during real staging and production builds. Their checked-in
+Pass `SHISHAGO_API_URL` during real staging and production builds. Their checked-in
 fallbacks use the reserved `.example` domain so a build cannot accidentally target an
 unknown live server.
 
 ## Run
 
 For complete first-time setup, daily startup commands, mobile devices, and
-troubleshooting, read [Starting Chichago locally](docs/START_FRONTEND_AND_BACKEND.md).
+troubleshooting, read [Starting Shisha Go locally](docs/START_FRONTEND_AND_BACKEND.md).
+The concise [Word startup guide](docs/START_SHISHAGO_FRONTEND_AND_BACKEND.docx)
+also uses the new project name and environment variables.
 
-Start `chichagoBack`, then:
+Start `shishaGoBack`, then:
 
 ```powershell
 flutter pub get
-flutter run --flavor dev -t lib/main_dev.dart --dart-define=CHICHAGO_API_URL=http://10.0.2.2:8001
+flutter run --flavor dev -t lib/main_dev.dart --dart-define=SHISHAGO_API_URL=http://10.0.2.2:8001
 ```
 
 For an Android emulator, use `http://10.0.2.2:8001`. For a physical phone, use the
@@ -45,7 +58,7 @@ scheme and a URL reachable by the simulator/device.
 Flutter web does not use native flavors, so select its entry point directly:
 
 ```powershell
-flutter run -d chrome -t lib/main_dev.dart --dart-define=CHICHAGO_API_URL=http://127.0.0.1:8001
+flutter run -d chrome -t lib/main_dev.dart --dart-define=SHISHAGO_API_URL=http://127.0.0.1:8001
 ```
 
 Web location access requires HTTPS or localhost.
@@ -53,9 +66,9 @@ Web location access requires HTTPS or localhost.
 ## Build targets
 
 ```powershell
-flutter build web -t lib/main_prod.dart --dart-define=CHICHAGO_API_URL=https://api.chichago.example
-flutter build appbundle --flavor prod -t lib/main_prod.dart --dart-define=CHICHAGO_API_URL=https://api.chichago.example
-flutter build ios --flavor prod -t lib/main_prod.dart --dart-define=CHICHAGO_API_URL=https://api.chichago.example
+flutter build web -t lib/main_prod.dart --dart-define=SHISHAGO_API_URL=https://api.shishago.example
+flutter build appbundle --flavor prod -t lib/main_prod.dart --dart-define=SHISHAGO_API_URL=https://api.shishago.example
+flutter build ios --flavor prod -t lib/main_prod.dart --dart-define=SHISHAGO_API_URL=https://api.shishago.example
 ```
 
 iOS builds require macOS/Xcode. Replace the example command URL with the deployed HTTPS

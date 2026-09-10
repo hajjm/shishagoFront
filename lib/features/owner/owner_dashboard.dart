@@ -10,7 +10,7 @@ import '../../widgets/order_widgets.dart';
 
 class OwnerDashboard extends StatefulWidget {
   const OwnerDashboard({super.key, required this.store, required this.session});
-  final ChichagoStore store;
+  final ShishaGoStore store;
   final SessionController session;
 
   @override
@@ -116,7 +116,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
 
 class OwnerOrdersPage extends StatefulWidget {
   const OwnerOrdersPage({super.key, required this.store});
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   @override
   State<OwnerOrdersPage> createState() => _OwnerOrdersPageState();
@@ -399,7 +399,7 @@ class _MetricCard extends StatelessWidget {
 class _OwnerOrderCard extends StatelessWidget {
   const _OwnerOrderCard({required this.order, required this.store});
   final AppOrder order;
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   Future<void> assign(BuildContext context) async {
     final drivers = store.users
@@ -508,7 +508,7 @@ class _OwnerOrderCard extends StatelessWidget {
 
 class OwnerCatalogPage extends StatelessWidget {
   const OwnerCatalogPage({super.key, required this.store});
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -590,7 +590,7 @@ class OwnerCatalogPage extends StatelessWidget {
 
 Future<void> showProductEditor(
   BuildContext context,
-  ChichagoStore store, {
+  ShishaGoStore store, {
   Product? product,
 }) async {
   final name = TextEditingController(text: product?.name);
@@ -675,7 +675,7 @@ Future<void> showProductEditor(
 
 class OwnerPeoplePage extends StatelessWidget {
   const OwnerPeoplePage({super.key, required this.store});
-  final ChichagoStore store;
+  final ShishaGoStore store;
 
   Future<void> addDriver(BuildContext context) async {
     final name = TextEditingController();

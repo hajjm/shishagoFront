@@ -1,4 +1,4 @@
-import 'package:chichago/services/device_location_service.dart';
+import 'package:shishago/services/device_location_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

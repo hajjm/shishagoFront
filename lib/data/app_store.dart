@@ -7,13 +7,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/app_models.dart';
-import '../services/chichago_api.dart';
+import '../services/shishago_api.dart';
 import '../services/session_controller.dart';
 
-class ChichagoStore extends ChangeNotifier {
-  ChichagoStore({required this.api, required this.session});
+class ShishaGoStore extends ChangeNotifier {
+  ShishaGoStore({required this.api, required this.session});
 
-  final ChichagoApi api;
+  final ShishaGoApi api;
   final SessionController session;
 
   List<Product> products = [];
@@ -94,7 +94,7 @@ class ChichagoStore extends ChangeNotifier {
   Future<AppOrder> checkout({String notes = ''}) async {
     final user = session.user;
     if (user == null || user.latitude == null || user.longitude == null) {
-      throw const ChichagoApiException(
+      throw const ShishaGoApiException(
         'Add a delivery location to your profile first',
         400,
       );
@@ -199,7 +199,7 @@ class ChichagoStore extends ChangeNotifier {
       sortOrder: sortOrder,
     );
     await FileSaver.instance.saveFile(
-      name: 'chichago-orders',
+      name: 'shishago-orders',
       bytes: bytes,
       fileExtension: 'csv',
       mimeType: MimeType.csv,
@@ -238,7 +238,7 @@ class ChichagoStore extends ChangeNotifier {
 
   Future<void> startLocationSharing(AppOrder order) async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      throw const ChichagoApiException('Enable location services first', 400);
+      throw const ShishaGoApiException('Enable location services first', 400);
     }
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -246,7 +246,7 @@ class ChichagoStore extends ChangeNotifier {
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      throw const ChichagoApiException('Location permission is required', 403);
+      throw const ShishaGoApiException('Location permission is required', 403);
     }
     await _locationSubscription?.cancel();
     _locationSubscription =

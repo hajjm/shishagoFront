@@ -2,13 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_models.dart';
-import 'chichago_api.dart';
+import 'shishago_api.dart';
 
 class SessionController extends ChangeNotifier {
   SessionController(this.api);
 
-  static const _tokenKey = 'chichago_access_token';
-  final ChichagoApi api;
+  static const _tokenKey = 'shishago_access_token';
+  // Migrate sessions created before the brand rename on the same installation.
+  static const _legacyTokenKey = 'chichago_access_token';
+  final ShishaGoApi api;
 
   AppUser? user;
   bool loading = false;
@@ -17,14 +19,19 @@ class SessionController extends ChangeNotifier {
 
   Future<void> restore() async {
     final preferences = await SharedPreferences.getInstance();
-    final token = preferences.getString(_tokenKey);
+    final token =
+        preferences.getString(_tokenKey) ??
+        preferences.getString(_legacyTokenKey);
     if (token == null) return;
     api.accessToken = token;
     try {
       user = AppUser.fromJson(await api.getMe());
+      await preferences.setString(_tokenKey, token);
+      await preferences.remove(_legacyTokenKey);
     } catch (_) {
       api.accessToken = null;
       await preferences.remove(_tokenKey);
+      await preferences.remove(_legacyTokenKey);
     }
     notifyListeners();
   }
@@ -90,6 +97,7 @@ class SessionController extends ChangeNotifier {
       user = AppUser.fromJson(response['user'] as Map<String, dynamic>);
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(_tokenKey, api.accessToken!);
+      await preferences.remove(_legacyTokenKey);
     });
   }
 
@@ -122,6 +130,7 @@ class SessionController extends ChangeNotifier {
     developmentCode = null;
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_tokenKey);
+    await preferences.remove(_legacyTokenKey);
     notifyListeners();
   }
 

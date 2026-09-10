@@ -1,13 +1,14 @@
-import 'package:chichago/app.dart';
+import 'package:shishago/app.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('opens on sign in and links to a separate sign-up page', (
     tester,
   ) async {
-    await tester.pumpWidget(const ChichagoApp(skipRestore: true));
+    await tester.pumpWidget(const ShishaGoApp(skipRestore: true));
     await tester.pumpAndSettle();
 
+    expect(find.text('Shisha Go'), findsOneWidget);
     expect(find.text('Welcome back.'), findsOneWidget);
     expect(find.text('Send code with WhatsApp'), findsOneWidget);
     expect(find.text('Create an account'), findsOneWidget);

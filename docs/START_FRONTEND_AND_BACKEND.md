@@ -1,9 +1,14 @@
-# Starting Chichago Locally
+# Starting Shisha Go Locally
 
-This guide starts the Chichago PostgreSQL database, FastAPI backend, and Flutter
+This guide starts the Shisha Go PostgreSQL database, FastAPI backend, and Flutter
 frontend on Windows PowerShell.
 
 ## Project locations
+
+The application is named **Shisha Go**. The existing checkout folder names below
+are unchanged. Use the new `SHISHAGO_*` environment variables in the commands.
+For this existing installation, keep the backend `.env.dev` and Compose `.env`
+files so Docker continues to use the current database.
 
 ```text
 C:\Users\LOQ\Documents\GitHub\chichagoBack
@@ -60,7 +65,7 @@ Start PostgreSQL and apply all database migrations:
 ```powershell
 docker compose up -d postgres
 
-$env:CHICHAGO_ENV = "dev"
+$env:SHISHAGO_ENV = "dev"
 Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 .\.venv\Scripts\python.exe -m alembic upgrade head
 ```
@@ -77,7 +82,7 @@ cd C:\Users\LOQ\Documents\GitHub\chichagoBack
 
 docker compose up -d postgres
 
-$env:CHICHAGO_ENV = "dev"
+$env:SHISHAGO_ENV = "dev"
 Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8001
@@ -111,7 +116,7 @@ cd C:\Users\LOQ\Documents\GitHub\chichagoFront
 flutter run -d chrome `
   --web-port 8080 `
   -t lib/main_dev.dart `
-  --dart-define=CHICHAGO_API_URL=http://127.0.0.1:8001
+  --dart-define=SHISHAGO_API_URL=http://127.0.0.1:8001
 ```
 
 Flutter should open <http://localhost:8080>. Web location access works on
@@ -128,7 +133,7 @@ flutter devices
 flutter run -d <ANDROID_DEVICE_ID> `
   --flavor dev `
   -t lib/main_dev.dart `
-  --dart-define=CHICHAGO_API_URL=http://10.0.2.2:8001
+  --dart-define=SHISHAGO_API_URL=http://10.0.2.2:8001
 ```
 
 Replace `<ANDROID_DEVICE_ID>` with the ID printed by `flutter devices`.
@@ -147,7 +152,7 @@ The phone and computer must be connected to the same network.
 
    ```powershell
    cd C:\Users\LOQ\Documents\GitHub\chichagoBack
-   $env:CHICHAGO_ENV = "dev"
+   $env:SHISHAGO_ENV = "dev"
    .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
    ```
 
@@ -159,7 +164,7 @@ The phone and computer must be connected to the same network.
    flutter run -d <PHONE_DEVICE_ID> `
      --flavor dev `
      -t lib/main_dev.dart `
-     --dart-define=CHICHAGO_API_URL=http://192.168.1.50:8001
+     --dart-define=SHISHAGO_API_URL=http://192.168.1.50:8001
    ```
 
 Replace `192.168.1.50` with the computer's actual IPv4 address. Windows Firewall
@@ -173,7 +178,7 @@ an API URL reachable by the simulator or physical device:
 ```bash
 flutter run --flavor dev \
   -t lib/main_dev.dart \
-  --dart-define=CHICHAGO_API_URL=http://<BACKEND-IP>:8001
+  --dart-define=SHISHAGO_API_URL=http://<BACKEND-IP>:8001
 ```
 
 For a physical iPhone, prefer an HTTPS development URL. iOS may reject a local
@@ -196,7 +201,7 @@ Backend:
 
 ```powershell
 cd C:\Users\LOQ\Documents\GitHub\chichagoBack
-$env:CHICHAGO_ENV = "dev"
+$env:SHISHAGO_ENV = "dev"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m alembic check
 ```
@@ -236,7 +241,7 @@ Use another backend port, for example `8002`, and pass the same port to Flutter:
 flutter run -d chrome `
   --web-port 8080 `
   -t lib/main_dev.dart `
-  --dart-define=CHICHAGO_API_URL=http://127.0.0.1:8002
+  --dart-define=SHISHAGO_API_URL=http://127.0.0.1:8002
 ```
 
 ### Port 8080 is already in use
@@ -252,7 +257,7 @@ Confirm Docker Desktop is running, then run:
 ```powershell
 cd C:\Users\LOQ\Documents\GitHub\chichagoBack
 docker compose up -d postgres
-$env:CHICHAGO_ENV = "dev"
+$env:SHISHAGO_ENV = "dev"
 Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 .\.venv\Scripts\python.exe -m alembic upgrade head
 ```
@@ -265,7 +270,7 @@ The development database URL must use port `55432`, not `5432`.
 - Confirm Flutter uses the same backend port.
 - Use `127.0.0.1` for web, `10.0.2.2` for an Android emulator, and the
   computer's LAN IPv4 address for a physical phone.
-- Restart the frontend after changing `CHICHAGO_API_URL`.
+- Restart the frontend after changing `SHISHAGO_API_URL`.
 
 ### Location does not work on web
 
@@ -289,9 +294,9 @@ Use the matching backend environment and Flutter entry point:
 
 | Environment | Backend selector | Flutter entry point |
 |---|---|---|
-| Development | `CHICHAGO_ENV=dev` | `lib/main_dev.dart` |
-| Staging | `CHICHAGO_ENV=staging` | `lib/main_staging.dart` |
-| Production | `CHICHAGO_ENV=prod` | `lib/main_prod.dart` |
+| Development | `SHISHAGO_ENV=dev` | `lib/main_dev.dart` |
+| Staging | `SHISHAGO_ENV=staging` | `lib/main_staging.dart` |
+| Production | `SHISHAGO_ENV=prod` | `lib/main_prod.dart` |
 
 Staging and production require real HTTPS API URLs, PostgreSQL credentials,
 strong secrets, exact CORS origins, and configured WhatsApp/Firebase services.

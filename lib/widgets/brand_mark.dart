@@ -12,11 +12,11 @@ class BrandLogo extends StatelessWidget {
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(size * 0.16),
     child: Image.asset(
-      'assets/branding/chichago-logo.jpeg',
+      'assets/branding/shishago-logo.jpeg',
       width: size,
       height: size,
       fit: BoxFit.contain,
-      semanticLabel: 'Chichago logo',
+      semanticLabel: 'Shisha Go logo',
       filterQuality: FilterQuality.high,
     ),
   );
@@ -37,7 +37,7 @@ class BrandMark extends StatelessWidget {
         BrandLogo(size: compact ? 40 : 56),
         const SizedBox(width: 10),
         Text(
-          'chichago',
+          'Shisha Go',
           style: TextStyle(
             color: color,
             fontSize: compact ? 21 : 25,

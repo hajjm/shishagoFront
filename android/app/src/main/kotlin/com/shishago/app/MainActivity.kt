@@ -1,4 +1,4 @@
-package com.chichago.app
+package com.shishago.app
 
 import io.flutter.embedding.android.FlutterActivity
 

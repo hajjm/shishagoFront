@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.chichago.app"
+    namespace = "com.shishago.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.chichago.app"
+        applicationId = "com.shishago.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -36,17 +36,17 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            resValue("string", "app_name", "Chichago Dev")
+            resValue("string", "app_name", "Shisha Go Dev")
         }
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            resValue("string", "app_name", "Chichago Staging")
+            resValue("string", "app_name", "Shisha Go Staging")
         }
         create("prod") {
             dimension = "environment"
-            resValue("string", "app_name", "Chichago")
+            resValue("string", "app_name", "Shisha Go")
         }
     }
 

@@ -1,4 +1,4 @@
-import 'package:chichago/config/app_environment.dart';
+import 'package:shishago/config/app_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

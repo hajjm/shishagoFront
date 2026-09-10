@@ -8,15 +8,15 @@ extension AppEnvironmentValue on AppEnvironment {
   };
 
   String get displayName => switch (this) {
-    AppEnvironment.dev => 'Chichago Dev',
-    AppEnvironment.staging => 'Chichago Staging',
-    AppEnvironment.prod => 'Chichago',
+    AppEnvironment.dev => 'Shisha Go Dev',
+    AppEnvironment.staging => 'Shisha Go Staging',
+    AppEnvironment.prod => 'Shisha Go',
   };
 
   String get defaultApiUrl => switch (this) {
     AppEnvironment.dev => 'http://127.0.0.1:8001',
-    AppEnvironment.staging => 'https://api-staging.chichago.example',
-    AppEnvironment.prod => 'https://api.chichago.example',
+    AppEnvironment.staging => 'https://api-staging.shishago.example',
+    AppEnvironment.prod => 'https://api.shishago.example',
   };
 }
 
@@ -29,7 +29,10 @@ class AppConfig {
   );
 
   factory AppConfig.forEnvironment(AppEnvironment environment) {
-    const apiOverride = String.fromEnvironment('CHICHAGO_API_URL');
+    const apiOverride = String.fromEnvironment(
+      'SHISHAGO_API_URL',
+      defaultValue: String.fromEnvironment('CHICHAGO_API_URL'),
+    );
     return AppConfig(
       environment: environment,
       apiBaseUrl: apiOverride.isEmpty
@@ -39,7 +42,10 @@ class AppConfig {
   }
 
   factory AppConfig.fromDefines() {
-    const value = String.fromEnvironment('CHICHAGO_ENV', defaultValue: 'dev');
+    const value = String.fromEnvironment(
+      'SHISHAGO_ENV',
+      defaultValue: String.fromEnvironment('CHICHAGO_ENV', defaultValue: 'dev'),
+    );
     return AppConfig.forEnvironment(parseEnvironment(value));
   }
 
@@ -53,7 +59,7 @@ AppEnvironment parseEnvironment(String value) => switch (value.toLowerCase()) {
   'prod' || 'production' => AppEnvironment.prod,
   _ => throw ArgumentError.value(
     value,
-    'CHICHAGO_ENV',
+    'SHISHAGO_ENV',
     'Expected dev, staging, or prod',
   ),
 };
