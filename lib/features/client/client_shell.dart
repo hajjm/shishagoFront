@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_theme.dart';
 import '../../data/app_store.dart';
 import '../../models/app_models.dart';
+import '../../services/device_location_service.dart';
 import '../../services/session_controller.dart';
 import '../../widgets/brand_mark.dart';
 import '../../widgets/notifications_button.dart';
@@ -785,6 +785,9 @@ Future<void> showEditProfile(
   final addressController = TextEditingController(text: session.user!.address);
   var latitude = session.user!.latitude;
   var longitude = session.user!.longitude;
+  var location = latitude == null || longitude == null
+      ? null
+      : CapturedLocation(latitude: latitude, longitude: longitude);
   var locating = false;
 
   await showDialog<void>(
@@ -825,23 +828,10 @@ Future<void> showEditProfile(
                         : () async {
                             setDialogState(() => locating = true);
                             try {
-                              var permission =
-                                  await Geolocator.checkPermission();
-                              if (permission == LocationPermission.denied) {
-                                permission =
-                                    await Geolocator.requestPermission();
-                              }
-                              if (permission == LocationPermission.denied ||
-                                  permission ==
-                                      LocationPermission.deniedForever) {
-                                throw Exception(
-                                  'Location permission is required',
-                                );
-                              }
-                              final position =
-                                  await Geolocator.getCurrentPosition();
-                              latitude = position.latitude;
-                              longitude = position.longitude;
+                              location = await const DeviceLocationService()
+                                  .captureCurrent();
+                              latitude = location!.latitude;
+                              longitude = location!.longitude;
                             } catch (error) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -865,10 +855,20 @@ Future<void> showEditProfile(
                     label: Text(
                       latitude == null
                           ? 'Use current GPS location'
-                          : 'GPS location selected',
+                          : 'Update GPS location',
                     ),
                   ),
                 ),
+                if (location != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'GPS: ${location!.label}',
+                    style: const TextStyle(
+                      color: AppColors.sage,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

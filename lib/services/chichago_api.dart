@@ -7,20 +7,27 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 class ChichagoApi {
   ChichagoApi({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
-      baseUrl = baseUrl ?? 'http://127.0.0.1:8000';
+      baseUrl = baseUrl ?? 'http://127.0.0.1:8001';
 
   final http.Client _client;
   final String baseUrl;
   String? accessToken;
 
-  Future<Map<String, dynamic>> requestVerificationCode(String phone) =>
-      _mapRequest('POST', '/auth/request-code', body: {'phone': phone});
+  Future<Map<String, dynamic>> requestVerificationCode({
+    required String phone,
+    required String flow,
+  }) => _mapRequest(
+    'POST',
+    '/auth/request-code',
+    body: {'phone': phone, 'flow': flow},
+  );
 
   Future<Map<String, dynamic>> verifyCode({
     required String phone,
     required String code,
-    required String name,
-    required String address,
+    required String flow,
+    String? name,
+    String? address,
     double? latitude,
     double? longitude,
   }) async {
@@ -30,6 +37,7 @@ class ChichagoApi {
       body: {
         'phone': phone,
         'code': code,
+        'flow': flow,
         'name': name,
         'address': address,
         'latitude': latitude,

@@ -29,18 +29,51 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> requestCode(String phone) async {
+  Future<void> requestSignInCode(String phone) =>
+      _requestCode(phone: phone, flow: 'sign_in');
+
+  Future<void> requestSignUpCode(String phone) =>
+      _requestCode(phone: phone, flow: 'sign_up');
+
+  Future<void> _requestCode({
+    required String phone,
+    required String flow,
+  }) async {
     await _run(() async {
-      final response = await api.requestVerificationCode(phone);
+      final response = await api.requestVerificationCode(
+        phone: phone,
+        flow: flow,
+      );
       developmentCode = response['dev_code'] as String?;
     });
   }
 
-  Future<void> verify({
+  Future<void> signIn({required String phone, required String code}) =>
+      _verify(phone: phone, code: code, flow: 'sign_in');
+
+  Future<void> signUp({
     required String phone,
     required String code,
     required String name,
     required String address,
+    double? latitude,
+    double? longitude,
+  }) => _verify(
+    phone: phone,
+    code: code,
+    flow: 'sign_up',
+    name: name,
+    address: address,
+    latitude: latitude,
+    longitude: longitude,
+  );
+
+  Future<void> _verify({
+    required String phone,
+    required String code,
+    required String flow,
+    String? name,
+    String? address,
     double? latitude,
     double? longitude,
   }) async {
@@ -48,6 +81,7 @@ class SessionController extends ChangeNotifier {
       final response = await api.verifyCode(
         phone: phone,
         code: code,
+        flow: flow,
         name: name,
         address: address,
         latitude: latitude,

@@ -14,7 +14,7 @@ extension AppEnvironmentValue on AppEnvironment {
   };
 
   String get defaultApiUrl => switch (this) {
-    AppEnvironment.dev => 'http://127.0.0.1:8000',
+    AppEnvironment.dev => 'http://127.0.0.1:8001',
     AppEnvironment.staging => 'https://api-staging.chichago.example',
     AppEnvironment.prod => 'https://api.chichago.example',
   };
@@ -25,7 +25,7 @@ class AppConfig {
 
   static const development = AppConfig(
     environment: AppEnvironment.dev,
-    apiBaseUrl: 'http://127.0.0.1:8000',
+    apiBaseUrl: 'http://127.0.0.1:8001',
   );
 
   factory AppConfig.forEnvironment(AppEnvironment environment) {

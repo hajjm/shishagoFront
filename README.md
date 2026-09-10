@@ -5,8 +5,8 @@ and selects the client, owner, or driver experience from the authenticated serve
 
 ## Included flows
 
-- WhatsApp OTP account creation and sign-in
-- GPS-backed client delivery address
+- Sign-in-first WhatsApp OTP authentication with a separate client sign-up page
+- Client delivery addresses with a required, visibly confirmed GPS point
 - Chicha and market catalogs, cart, checkout, order history, and reorder
 - Live order status, driver coordinates, and driver phone details
 - Owner dashboard with order filtering, CSV export, catalog, client, and driver management
@@ -32,17 +32,17 @@ Start `chichagoBack`, then:
 
 ```powershell
 flutter pub get
-flutter run --flavor dev -t lib/main_dev.dart --dart-define=CHICHAGO_API_URL=http://10.0.2.2:8000
+flutter run --flavor dev -t lib/main_dev.dart --dart-define=CHICHAGO_API_URL=http://10.0.2.2:8001
 ```
 
-For an Android emulator, use `http://10.0.2.2:8000`. For a physical phone, use the
+For an Android emulator, use `http://10.0.2.2:8001`. For a physical phone, use the
 backend computer's LAN address. For iOS, use the same command with the `dev` Xcode
 scheme and a URL reachable by the simulator/device.
 
 Flutter web does not use native flavors, so select its entry point directly:
 
 ```powershell
-flutter run -d chrome -t lib/main_dev.dart --dart-define=CHICHAGO_API_URL=http://127.0.0.1:8000
+flutter run -d chrome -t lib/main_dev.dart --dart-define=CHICHAGO_API_URL=http://127.0.0.1:8001
 ```
 
 Web location access requires HTTPS or localhost.

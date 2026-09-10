@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'config/app_environment.dart';
 import 'core/app_theme.dart';
 import 'data/app_store.dart';
-import 'features/auth/role_entry_page.dart';
+import 'features/auth/sign_in_page.dart';
 import 'features/client/client_shell.dart';
 import 'features/driver/driver_dashboard.dart';
 import 'features/owner/owner_dashboard.dart';
@@ -66,7 +66,7 @@ class _ChichagoAppState extends State<ChichagoApp> {
           return AnimatedBuilder(
             animation: session,
             builder: (context, _) => session.user == null
-                ? RoleEntryPage(session: session)
+                ? SignInPage(session: session)
                 : _AuthenticatedHome(session: session),
           );
         },
