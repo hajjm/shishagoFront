@@ -22,6 +22,14 @@ class ClientShell extends StatefulWidget {
 
 class _ClientShellState extends State<ClientShell> {
   int selectedIndex = 0;
+  String? trackingOrderId;
+
+  void trackOrder(AppOrder order) {
+    setState(() {
+      trackingOrderId = order.id;
+      selectedIndex = 2;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,12 +42,26 @@ class _ClientShellState extends State<ClientShell> {
           }.contains(order.stage),
         )
         .toList();
+    AppOrder? trackingOrder;
+    for (final order in activeOrders) {
+      if (order.id == trackingOrderId) {
+        trackingOrder = order;
+        break;
+      }
+    }
+    if (trackingOrder == null && activeOrders.isNotEmpty) {
+      trackingOrder = activeOrders.first;
+    }
     final pages = [
       ShopPage(store: widget.store, user: widget.session.user!),
-      OrdersPage(store: widget.store),
-      activeOrders.isEmpty
+      OrdersPage(store: widget.store, onTrack: trackOrder),
+      trackingOrder == null
           ? const _NoActiveDelivery()
-          : TrackingPage(store: widget.store, order: activeOrders.first),
+          : TrackingPage(
+              key: ValueKey(trackingOrder.id),
+              store: widget.store,
+              order: trackingOrder,
+            ),
       ProfilePage(session: widget.session),
     ];
     return Scaffold(
@@ -94,6 +116,7 @@ class ShopPage extends StatefulWidget {
 
 class _ShopPageState extends State<ShopPage> {
   ProductCategory category = ProductCategory.chicha;
+  String? marketCategoryId;
 
   Future<void> checkout() async {
     try {
@@ -116,7 +139,13 @@ class _ShopPageState extends State<ShopPage> {
       animation: widget.store,
       builder: (context, _) {
         final products = widget.store.products
-            .where((product) => product.category == category)
+            .where(
+              (product) =>
+                  product.category == category &&
+                  (category != ProductCategory.market ||
+                      marketCategoryId == null ||
+                      product.marketCategoryId == marketCategoryId),
+            )
             .toList();
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -227,7 +256,7 @@ class _ShopPageState extends State<ShopPage> {
                                   icon: Icon(
                                     Icons.local_fire_department_outlined,
                                   ),
-                                  label: Text('Chicha'),
+                                  label: Text('Shisha'),
                                 ),
                                 ButtonSegment(
                                   value: ProductCategory.market,
@@ -236,9 +265,47 @@ class _ShopPageState extends State<ShopPage> {
                                 ),
                               ],
                               selected: {category},
-                              onSelectionChanged: (selection) =>
-                                  setState(() => category = selection.first),
+                              onSelectionChanged: (selection) => setState(() {
+                                category = selection.first;
+                                marketCategoryId = null;
+                              }),
                             ),
+                            if (category == ProductCategory.market &&
+                                widget.store.marketCategories.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    ChoiceChip(
+                                      label: const Text('All'),
+                                      selected: marketCategoryId == null,
+                                      onSelected: (_) => setState(
+                                        () => marketCategoryId = null,
+                                      ),
+                                    ),
+                                    ...widget.store.marketCategories
+                                        .where((value) => value.isActive)
+                                        .map(
+                                          (value) => Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 8,
+                                            ),
+                                            child: ChoiceChip(
+                                              label: Text(value.name),
+                                              selected:
+                                                  marketCategoryId == value.id,
+                                              onSelected: (_) => setState(
+                                                () =>
+                                                    marketCategoryId = value.id,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             if (widget.store.cartCount > 0) ...[
                               const SizedBox(height: 14),
                               Card(
@@ -385,8 +452,48 @@ class ProductCard extends StatelessWidget {
 }
 
 class OrdersPage extends StatelessWidget {
-  const OrdersPage({super.key, required this.store});
+  const OrdersPage({super.key, required this.store, required this.onTrack});
   final ShishaGoStore store;
+  final ValueChanged<AppOrder> onTrack;
+
+  bool isTrackable(AppOrder order) => {
+    OrderStage.accepted,
+    OrderStage.preparing,
+    OrderStage.onTheWay,
+  }.contains(order.stage);
+
+  Future<void> cancelOrder(BuildContext context, AppOrder order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this order?'),
+        content: Text(
+          '${order.reference} can only be cancelled while it is pending.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep order'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await store.changeOrderStatus(order, OrderStage.cancelled);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -413,63 +520,86 @@ class OrdersPage extends StatelessWidget {
           ...store.orders.map(
             (order) => Card(
               margin: const EdgeInsets.only(bottom: 12),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            order.reference,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        OrderStatusPill(stage: order.stage),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(order.items),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text(
-                          '\$${order.total.toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                        const Spacer(),
-                        Flexible(
-                          child: Text(
-                            order.address,
-                            textAlign: TextAlign.end,
-                            style: const TextStyle(
-                              color: AppColors.muted,
-                              fontSize: 12,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: isTrackable(order) ? () => onTrack(order) : null,
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              order.reference,
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ),
+                          OrderStatusPill(stage: order.stage),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(order.items),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text(
+                            '\$${order.total.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          const Spacer(),
+                          Flexible(
+                            child: Text(
+                              order.address,
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (order.stage == OrderStage.pending) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red.shade700,
+                          ),
+                          onPressed: store.loading
+                              ? null
+                              : () => cancelOrder(context, order),
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Cancel order'),
+                        ),
+                      ] else if (isTrackable(order)) ...[
+                        const SizedBox(height: 12),
+                        FilledButton.tonalIcon(
+                          onPressed: () => onTrack(order),
+                          icon: const Icon(Icons.location_on_rounded),
+                          label: const Text('Track order'),
+                        ),
+                      ] else if (order.stage == OrderStage.completed) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            try {
+                              await store.reorder(order);
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(error.toString())),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Order again'),
                         ),
                       ],
-                    ),
-                    if (order.stage == OrderStage.completed) ...[
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          try {
-                            await store.reorder(order);
-                          } catch (error) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(error.toString())),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Order again'),
-                      ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

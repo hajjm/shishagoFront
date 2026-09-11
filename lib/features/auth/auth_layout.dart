@@ -136,7 +136,7 @@ class _HeroPanel extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const BrandMark(light: true),
+        const BrandMark(light: true, logoBlendColor: AppColors.ember),
         const Spacer(),
         Container(
           width: 136,

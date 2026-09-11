@@ -75,6 +75,17 @@ class ShishaGoApi {
     authenticated: true,
   );
 
+  Future<List<Map<String, dynamic>>> getMarketCategories({
+    bool activeOnly = true,
+  }) => _listRequest('GET', '/market-categories?active_only=$activeOnly');
+
+  Future<Map<String, dynamic>> createMarketCategory(String name) => _mapRequest(
+    'POST',
+    '/market-categories',
+    body: {'name': name},
+    authenticated: true,
+  );
+
   Future<List<Map<String, dynamic>>> getOrders({
     String? status,
     DateTime? dateFrom,

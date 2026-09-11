@@ -74,6 +74,70 @@ void main() {
     expect(controller.text, '12.34');
   });
 
+  testWidgets('catalog separates Shisha and categorized Market items', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = createStore();
+    addTearDown(store.dispose);
+    addTearDown(store.api.close);
+    store.marketCategories = const [
+      MarketCategory(
+        id: 'cat-charcoal',
+        name: 'Charcoal',
+        slug: 'charcoal',
+        isActive: true,
+      ),
+      MarketCategory(
+        id: 'cat-accessories',
+        name: 'Accessories',
+        slug: 'accessories',
+        isActive: true,
+      ),
+    ];
+    store.products = const [
+      Product(
+        id: 'shisha-1',
+        name: 'Fresh Mint',
+        description: '',
+        category: ProductCategory.chicha,
+        price: 18,
+      ),
+      Product(
+        id: 'market-1',
+        name: 'Natural Charcoal',
+        description: '',
+        category: ProductCategory.market,
+        marketCategoryId: 'cat-charcoal',
+        marketCategoryName: 'Charcoal',
+        price: 6.5,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OwnerCatalogPage(store: store)),
+      ),
+    );
+    expect(find.text('Fresh Mint'), findsOneWidget);
+    expect(find.text('Natural Charcoal'), findsNothing);
+
+    await tester.tap(find.text('Market'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh Mint'), findsNothing);
+    expect(find.text('Natural Charcoal'), findsOneWidget);
+    expect(find.text('Charcoal'), findsWidgets);
+    expect(find.text('Accessories'), findsOneWidget);
+    expect(find.text('Add category'), findsOneWidget);
+
+    await tester.tap(find.text('Add item'));
+    await tester.pumpAndSettle();
+    expect(find.text('Market category'), findsOneWidget);
+  });
+
   testWidgets('people page separates clients and drivers', (tester) async {
     final store = createStore();
     addTearDown(store.dispose);

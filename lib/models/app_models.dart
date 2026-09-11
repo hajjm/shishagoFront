@@ -13,6 +13,34 @@ extension UserRoleValue on UserRole {
 
 enum ProductCategory { chicha, market }
 
+extension ProductCategoryLabel on ProductCategory {
+  String get label => switch (this) {
+    ProductCategory.chicha => 'Shisha',
+    ProductCategory.market => 'Market',
+  };
+}
+
+class MarketCategory {
+  const MarketCategory({
+    required this.id,
+    required this.name,
+    required this.slug,
+    required this.isActive,
+  });
+
+  factory MarketCategory.fromJson(Map<String, dynamic> json) => MarketCategory(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    slug: json['slug'] as String,
+    isActive: json['is_active'] as bool? ?? true,
+  );
+
+  final String id;
+  final String name;
+  final String slug;
+  final bool isActive;
+}
+
 enum OrderStage { pending, accepted, preparing, onTheWay, completed, cancelled }
 
 extension OrderStageLabel on OrderStage {
@@ -84,6 +112,8 @@ class Product {
     required this.description,
     required this.category,
     required this.price,
+    this.marketCategoryId,
+    this.marketCategoryName,
     this.imageUrl,
     this.available = true,
   });
@@ -96,6 +126,8 @@ class Product {
         ? ProductCategory.market
         : ProductCategory.chicha,
     price: (json['price'] as num).toDouble(),
+    marketCategoryId: json['market_category_id'] as String?,
+    marketCategoryName: json['market_category_name'] as String?,
     imageUrl: json['image_url'] as String?,
     available: json['is_available'] as bool? ?? true,
   );
@@ -105,6 +137,8 @@ class Product {
   final String description;
   final ProductCategory category;
   final double price;
+  final String? marketCategoryId;
+  final String? marketCategoryName;
   final String? imageUrl;
   final bool available;
 

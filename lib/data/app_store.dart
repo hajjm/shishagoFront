@@ -19,6 +19,7 @@ class ShishaGoStore extends ChangeNotifier {
   final SessionController session;
 
   List<Product> products = [];
+  List<MarketCategory> marketCategories = [];
   List<AppOrder> orders = [];
   List<AppUser> users = [];
   List<AppNotification> notifications = [];
@@ -54,6 +55,9 @@ class ShishaGoStore extends ChangeNotifier {
     products = (await api.getItems(
       availableOnly: role != UserRole.owner,
     )).map(Product.fromJson).toList();
+    marketCategories = (await api.getMarketCategories(
+      activeOnly: role != UserRole.owner,
+    )).map(MarketCategory.fromJson).toList();
     orders = (await api.getOrders()).map(AppOrder.fromJson).toList();
     notifications = (await api.getNotifications())
         .map(AppNotification.fromJson)
@@ -144,6 +148,7 @@ class ShishaGoStore extends ChangeNotifier {
     required String name,
     required String description,
     required ProductCategory category,
+    String? marketCategoryId,
     required double price,
     required bool available,
   }) => _run(() async {
@@ -151,6 +156,9 @@ class ShishaGoStore extends ChangeNotifier {
       'name': name,
       'description': description,
       'category': category.name,
+      'market_category_id': category == ProductCategory.market
+          ? marketCategoryId
+          : null,
       'price': price,
       'is_available': available,
     };
@@ -164,6 +172,18 @@ class ShishaGoStore extends ChangeNotifier {
       products[index] = updated;
     }
   });
+
+  Future<MarketCategory> createMarketCategory(String name) async {
+    late MarketCategory category;
+    await _run(() async {
+      category = MarketCategory.fromJson(
+        await api.createMarketCategory(name.trim()),
+      );
+      marketCategories.add(category);
+      marketCategories.sort((left, right) => left.name.compareTo(right.name));
+    });
+    return category;
+  }
 
   Future<void> createDriver({required String name, required String phone}) =>
       _run(() async {

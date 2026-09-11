@@ -561,99 +561,263 @@ class _OwnerOrderCard extends StatelessWidget {
   );
 }
 
-class OwnerCatalogPage extends StatelessWidget {
+class OwnerCatalogPage extends StatefulWidget {
   const OwnerCatalogPage({super.key, required this.store});
   final ShishaGoStore store;
 
   @override
+  State<OwnerCatalogPage> createState() => _OwnerCatalogPageState();
+}
+
+class _OwnerCatalogPageState extends State<OwnerCatalogPage> {
+  ProductCategory selectedSection = ProductCategory.chicha;
+  String? selectedMarketCategoryId;
+
+  @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: store,
-    builder: (context, _) => ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    animation: widget.store,
+    builder: (context, _) {
+      final products = widget.store.products.where((product) {
+        if (product.category != selectedSection) return false;
+        return selectedSection != ProductCategory.market ||
+            selectedMarketCategoryId == null ||
+            product.marketCategoryId == selectedMarketCategoryId;
+      }).toList();
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Catalog',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const Text(
+                      'Manage Shisha and Market items.',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
                 children: [
-                  Text(
-                    'Catalog',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                  ),
-                  const Text(
-                    'Manage Chicha and Market items.',
-                    style: TextStyle(color: AppColors.muted),
+                  if (selectedSection == ProductCategory.market)
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          showMarketCategoryEditor(context, widget.store),
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                      label: const Text('Add category'),
+                    ),
+                  FilledButton.icon(
+                    onPressed: () => showProductEditor(
+                      context,
+                      widget.store,
+                      initialCategory: selectedSection,
+                    ),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add item'),
                   ),
                 ],
               ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<ProductCategory>(
+              segments: const [
+                ButtonSegment(
+                  value: ProductCategory.chicha,
+                  icon: Icon(Icons.local_fire_department_outlined),
+                  label: Text('Shisha'),
+                ),
+                ButtonSegment(
+                  value: ProductCategory.market,
+                  icon: Icon(Icons.shopping_bag_outlined),
+                  label: Text('Market'),
+                ),
+              ],
+              selected: {selectedSection},
+              onSelectionChanged: (selection) => setState(() {
+                selectedSection = selection.first;
+                selectedMarketCategoryId = null;
+              }),
             ),
-            FilledButton.icon(
-              onPressed: () => showProductEditor(context, store),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add item'),
+          ),
+          if (selectedSection == ProductCategory.market) ...[
+            const SizedBox(height: 14),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text('All'),
+                    selected: selectedMarketCategoryId == null,
+                    onSelected: (_) =>
+                        setState(() => selectedMarketCategoryId = null),
+                  ),
+                  ...widget.store.marketCategories
+                      .where((category) => category.isActive)
+                      .map(
+                        (category) => Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: ChoiceChip(
+                            label: Text(category.name),
+                            selected: selectedMarketCategoryId == category.id,
+                            onSelected: (_) => setState(
+                              () => selectedMarketCategoryId = category.id,
+                            ),
+                          ),
+                        ),
+                      ),
+                ],
+              ),
             ),
           ],
-        ),
-        const SizedBox(height: 22),
-        ...store.products.map(
-          (product) => Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 9,
-              ),
-              leading: Container(
-                width: 52,
-                height: 52,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.cream,
-                  borderRadius: BorderRadius.circular(15),
+          const SizedBox(height: 18),
+          if (products.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: Text(
+                  selectedSection == ProductCategory.market
+                      ? 'No market items in this category yet.'
+                      : 'No Shisha items yet.',
+                  style: const TextStyle(color: AppColors.muted),
                 ),
-                child: Icon(product.icon, color: AppColors.ember),
               ),
-              title: Text(
-                product.name,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text(
-                '${product.category.name} · ${product.available ? 'Available' : 'Hidden'}',
-              ),
-              trailing: Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    '\$${product.price.toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ...products.map(
+            (product) => Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 9,
+                ),
+                leading: Container(
+                  width: 52,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.cream,
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                  IconButton(
-                    onPressed: () =>
-                        showProductEditor(context, store, product: product),
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                ],
+                  child: Icon(product.icon, color: AppColors.ember),
+                ),
+                title: Text(
+                  product.name,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  '${product.category == ProductCategory.market ? product.marketCategoryName ?? 'Market' : 'Shisha'} · ${product.available ? 'Available' : 'Hidden'}',
+                ),
+                trailing: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      '\$${product.price.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    IconButton(
+                      onPressed: () => showProductEditor(
+                        context,
+                        widget.store,
+                        product: product,
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> showMarketCategoryEditor(
+  BuildContext context,
+  ShishaGoStore store,
+) async {
+  final name = TextEditingController();
+  String? nameError;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Add market category'),
+        content: TextField(
+          controller: name,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            labelText: 'Category name',
+            hintText: 'For example, Charcoal',
+            errorText: nameError,
+          ),
         ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: store.loading
+                ? null
+                : () async {
+                    if (name.text.trim().length < 2) {
+                      setState(() => nameError = 'Enter a category name');
+                      return;
+                    }
+                    try {
+                      await store.createMarketCategory(name.text);
+                      if (context.mounted) Navigator.pop(context);
+                    } catch (_) {
+                      if (context.mounted) {
+                        setState(() => nameError = store.error);
+                      }
+                    }
+                  },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
     ),
   );
+  name.dispose();
 }
 
 Future<void> showProductEditor(
   BuildContext context,
   ShishaGoStore store, {
   Product? product,
+  ProductCategory? initialCategory,
 }) async {
   final name = TextEditingController(text: product?.name);
   final description = TextEditingController(text: product?.description);
   final price = TextEditingController(text: product?.price.toString());
-  var category = product?.category ?? ProductCategory.chicha;
+  var category = product?.category ?? initialCategory ?? ProductCategory.chicha;
+  String? marketCategoryId = product?.marketCategoryId;
+  if (category == ProductCategory.market && marketCategoryId == null) {
+    final activeCategories = store.marketCategories.where(
+      (value) => value.isActive,
+    );
+    if (activeCategories.isNotEmpty) {
+      marketCategoryId = activeCategories.first.id;
+    }
+  }
   var available = product?.available ?? true;
   String? priceError;
+  String? categoryError;
   await showDialog<void>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -694,12 +858,55 @@ Future<void> showProductEditor(
                     .map(
                       (value) => DropdownMenuItem(
                         value: value,
-                        child: Text(value.name),
+                        child: Text(value.label),
                       ),
                     )
                     .toList(),
-                onChanged: (value) => setState(() => category = value!),
+                onChanged: (value) => setState(() {
+                  category = value!;
+                  categoryError = null;
+                  if (category == ProductCategory.market &&
+                      marketCategoryId == null) {
+                    final activeCategories = store.marketCategories.where(
+                      (entry) => entry.isActive,
+                    );
+                    if (activeCategories.isNotEmpty) {
+                      marketCategoryId = activeCategories.first.id;
+                    }
+                  }
+                }),
               ),
+              if (category == ProductCategory.market) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: marketCategoryId,
+                  decoration: InputDecoration(
+                    labelText: 'Market category',
+                    errorText: categoryError,
+                  ),
+                  items: store.marketCategories
+                      .where((value) => value.isActive)
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value.id,
+                          child: Text(value.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() {
+                    marketCategoryId = value;
+                    categoryError = null;
+                  }),
+                ),
+                if (store.marketCategories.every((value) => !value.isActive))
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Add a market category before creating this item.',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
+                  ),
+              ],
               SwitchListTile(
                 value: available,
                 onChanged: (value) => setState(() => available = value),
@@ -720,11 +927,17 @@ Future<void> showProductEditor(
                 setState(() => priceError = 'Enter a valid price');
                 return;
               }
+              if (category == ProductCategory.market &&
+                  marketCategoryId == null) {
+                setState(() => categoryError = 'Choose a market category');
+                return;
+              }
               await store.saveProduct(
                 existing: product,
                 name: name.text,
                 description: description.text,
                 category: category,
+                marketCategoryId: marketCategoryId,
                 price: parsedPrice,
                 available: available,
               );
