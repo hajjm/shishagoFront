@@ -148,7 +148,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         return Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: false,
-            title: const BrandMark(compact: true),
+            title: MediaQuery.sizeOf(context).width < 440
+                ? const BrandLogo(size: 40)
+                : const BrandMark(compact: true),
             actions: [
               NotificationsButton(store: widget.store),
               IconButton(

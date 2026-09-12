@@ -40,7 +40,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                     ['Orders', 'Catalog', 'People'][selectedIndex],
                     style: Theme.of(context).textTheme.headlineMedium,
                   )
-                : const BrandMark(compact: true),
+                : const BrandLogo(size: 40),
             actions: [
               NotificationsButton(store: widget.store),
               IconButton(

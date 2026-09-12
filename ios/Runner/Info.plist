@@ -4,6 +4,13 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Shisha Go uses your location for delivery addresses and live driver tracking.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Shisha Go connects to the development server on your local network while testing.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

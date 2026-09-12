@@ -96,7 +96,7 @@ class ShishaGoApi {
     final query = <String, String>{
       'sort_by': sortBy,
       'sort_order': sortOrder,
-      if (status != null) 'status': status,
+      'status': ?status,
       if (dateFrom != null) 'date_from': _date(dateFrom),
       if (dateTo != null) 'date_to': _date(dateTo),
     };
@@ -106,6 +106,9 @@ class ShishaGoApi {
       authenticated: true,
     );
   }
+
+  Future<Map<String, dynamic>> getOrder(String orderId) =>
+      _mapRequest('GET', '/orders/$orderId', authenticated: true);
 
   Future<Map<String, dynamic>> createOrder({
     required List<Map<String, dynamic>> items,
@@ -174,7 +177,7 @@ class ShishaGoApi {
     bool? active,
   }) => _listRequest(
     'GET',
-    '/users?${Uri(queryParameters: {if (role != null) 'role': role, if (active != null) 'active': '$active'}).query}',
+    '/users?${Uri(queryParameters: {'role': ?role, if (active != null) 'active': '$active'}).query}',
     authenticated: true,
   );
 
@@ -223,7 +226,7 @@ class ShishaGoApi {
   }) async {
     final query = Uri(
       queryParameters: {
-        if (status != null) 'status': status,
+        'status': ?status,
         if (dateFrom != null) 'date_from': _date(dateFrom),
         if (dateTo != null) 'date_to': _date(dateTo),
         'sort_by': sortBy,

@@ -4,4 +4,6 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug builds may connect to a FastAPI server on the developer's LAN. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

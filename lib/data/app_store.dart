@@ -11,6 +11,12 @@ import '../services/shishago_api.dart';
 import '../services/session_controller.dart';
 
 const driverLocationUpdateInterval = Duration(seconds: 10);
+const trackingPollingInterval = Duration(seconds: 10);
+const notificationPollingInterval = Duration(seconds: 20);
+const websocketHeartbeatInterval = Duration(seconds: 20);
+const websocketConnectionTimeout = Duration(seconds: 8);
+const websocketReconnectBaseDelay = Duration(seconds: 1);
+const websocketReconnectMaxDelay = Duration(seconds: 30);
 
 class _CartEntry {
   _CartEntry({
@@ -26,10 +32,25 @@ class _CartEntry {
 }
 
 class ShishaGoStore extends ChangeNotifier {
-  ShishaGoStore({required this.api, required this.session});
+  ShishaGoStore({
+    required this.api,
+    required this.session,
+    this.trackingPollInterval = trackingPollingInterval,
+    this.notificationPollInterval = notificationPollingInterval,
+    this.heartbeatInterval = websocketHeartbeatInterval,
+    this.connectionTimeout = websocketConnectionTimeout,
+    this.reconnectBaseDelay = websocketReconnectBaseDelay,
+    this.reconnectMaxDelay = websocketReconnectMaxDelay,
+  });
 
   final ShishaGoApi api;
   final SessionController session;
+  final Duration trackingPollInterval;
+  final Duration notificationPollInterval;
+  final Duration heartbeatInterval;
+  final Duration connectionTimeout;
+  final Duration reconnectBaseDelay;
+  final Duration reconnectMaxDelay;
 
   List<Product> products = [];
   List<MarketCategory> marketCategories = [];
@@ -48,6 +69,25 @@ class ShishaGoStore extends ChangeNotifier {
   StreamSubscription<dynamic>? _notificationSubscription;
   WebSocketChannel? _trackingChannel;
   WebSocketChannel? _notificationChannel;
+  Timer? _trackingPollTimer;
+  Timer? _notificationPollTimer;
+  Timer? _trackingReconnectTimer;
+  Timer? _notificationReconnectTimer;
+  Timer? _trackingHeartbeatTimer;
+  Timer? _notificationHeartbeatTimer;
+  Timer? _trackingPongTimer;
+  Timer? _notificationPongTimer;
+  String? _trackedOrderId;
+  bool _trackingPollInProgress = false;
+  bool _notificationPollInProgress = false;
+  bool _trackingRealtimeConnected = false;
+  bool _notificationRealtimeConnected = false;
+  int _trackingReconnectAttempts = 0;
+  int _notificationReconnectAttempts = 0;
+  bool _disposed = false;
+
+  bool get trackingRealtimeConnected => _trackingRealtimeConnected;
+  bool get notificationRealtimeConnected => _notificationRealtimeConnected;
 
   int get cartCount =>
       _cart.values.fold(0, (sum, entry) => sum + entry.quantity);
@@ -63,7 +103,7 @@ class ShishaGoStore extends ChangeNotifier {
 
   Future<void> initialize() async {
     await refresh();
-    _listenForNotifications();
+    unawaited(_connectNotificationSocket());
   }
 
   Future<void> refresh() => _run(() async {
@@ -300,19 +340,114 @@ class ShishaGoStore extends ChangeNotifier {
   }
 
   Future<void> watchTracking(AppOrder order) async {
-    await _trackingSubscription?.cancel();
-    await _trackingChannel?.sink.close();
+    await stopWatchingTracking();
+    _trackedOrderId = order.id;
+    await _pollTracking(order.id, clearOnFailure: true);
+    if (_disposed || _trackedOrderId != order.id) return;
+    unawaited(_connectTrackingSocket(order.id));
+  }
+
+  Future<void> stopWatchingTracking() async {
+    _trackedOrderId = null;
+    _trackingRealtimeConnected = false;
+    _trackingReconnectAttempts = 0;
+    _trackingPollTimer?.cancel();
+    _trackingPollTimer = null;
+    _trackingReconnectTimer?.cancel();
+    _trackingReconnectTimer = null;
+    _trackingHeartbeatTimer?.cancel();
+    _trackingHeartbeatTimer = null;
+    _trackingPongTimer?.cancel();
+    _trackingPongTimer = null;
+    final subscription = _trackingSubscription;
+    final channel = _trackingChannel;
+    _trackingSubscription = null;
+    _trackingChannel = null;
+    await subscription?.cancel();
+    await channel?.sink.close();
+  }
+
+  Future<void> _connectTrackingSocket(String orderId) async {
+    if (_disposed || _trackedOrderId != orderId) return;
+    _trackingReconnectTimer?.cancel();
+    _trackingReconnectTimer = null;
+
+    final previousSubscription = _trackingSubscription;
+    final previousChannel = _trackingChannel;
+    _trackingSubscription = null;
+    _trackingChannel = null;
+    await previousSubscription?.cancel();
+    await previousChannel?.sink.close();
+
+    WebSocketChannel? channel;
     try {
-      tracking = TrackingInfo.fromJson(await api.getTracking(order.id));
+      final createdChannel = api.orderUpdates(orderId);
+      channel = createdChannel;
+      _trackingChannel = createdChannel;
+      _trackingSubscription = createdChannel.stream.listen(
+        (event) => _handleTrackingEvent(orderId, createdChannel, event),
+        onError: (_) => _handleTrackingDisconnect(orderId, createdChannel),
+        onDone: () => _handleTrackingDisconnect(orderId, createdChannel),
+        cancelOnError: false,
+      );
+      await createdChannel.ready.timeout(connectionTimeout);
     } catch (_) {
-      tracking = null;
+      if (channel != null && identical(_trackingChannel, channel)) {
+        _handleTrackingDisconnect(orderId, channel);
+      } else if (_trackingChannel == null) {
+        _startTrackingPolling(orderId);
+        _scheduleTrackingReconnect(orderId);
+      }
+      return;
     }
-    _trackingChannel = api.orderUpdates(order.id);
-    _trackingSubscription = _trackingChannel!.stream.listen((event) {
+    final connectedChannel = channel;
+
+    if (_disposed ||
+        _trackedOrderId != orderId ||
+        !identical(_trackingChannel, connectedChannel)) {
+      await connectedChannel.sink.close();
+      return;
+    }
+    _trackingRealtimeConnected = true;
+    _trackingReconnectAttempts = 0;
+    _trackingPollTimer?.cancel();
+    _trackingPollTimer = null;
+    _trackingHeartbeatTimer?.cancel();
+    _trackingHeartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
+      try {
+        connectedChannel.sink.add('ping');
+        _trackingPongTimer?.cancel();
+        _trackingPongTimer = Timer(connectionTimeout, () {
+          _handleTrackingDisconnect(orderId, connectedChannel);
+          unawaited(connectedChannel.sink.close());
+        });
+      } catch (_) {
+        _handleTrackingDisconnect(orderId, connectedChannel);
+      }
+    });
+    _notifyIfActive();
+  }
+
+  void _handleTrackingEvent(
+    String orderId,
+    WebSocketChannel channel,
+    dynamic event,
+  ) {
+    if (_disposed ||
+        _trackedOrderId != orderId ||
+        !identical(_trackingChannel, channel)) {
+      return;
+    }
+    try {
       final decoded = event is String ? event : event.toString();
       final data = Map<String, dynamic>.from(
         (decoded.isEmpty ? <String, dynamic>{} : _decode(decoded)),
       );
+      if (data['type'] == 'pong') {
+        _trackingPongTimer?.cancel();
+        _trackingPongTimer = null;
+        return;
+      }
       if (data['type'] == 'location') {
         tracking = TrackingInfo.fromJson(
           Map<String, dynamic>.from(data['tracking'] as Map),
@@ -323,10 +458,89 @@ class ShishaGoStore extends ChangeNotifier {
           Map<String, dynamic>.from(data['order'] as Map),
         );
         _replaceOrder(updated);
+        if (_isTerminal(updated.stage)) {
+          unawaited(stopWatchingTracking());
+        }
       }
-      notifyListeners();
-    }, onError: (_) {});
-    notifyListeners();
+      _notifyIfActive();
+    } catch (_) {
+      unawaited(_pollTracking(orderId));
+    }
+  }
+
+  void _handleTrackingDisconnect(String orderId, WebSocketChannel channel) {
+    if (_disposed ||
+        _trackedOrderId != orderId ||
+        !identical(_trackingChannel, channel)) {
+      return;
+    }
+    _trackingRealtimeConnected = false;
+    _trackingHeartbeatTimer?.cancel();
+    _trackingHeartbeatTimer = null;
+    _trackingPongTimer?.cancel();
+    _trackingPongTimer = null;
+    _startTrackingPolling(orderId);
+    _scheduleTrackingReconnect(orderId);
+    _notifyIfActive();
+  }
+
+  void _startTrackingPolling(String orderId) {
+    if (_disposed || _trackedOrderId != orderId) return;
+    unawaited(_pollTracking(orderId));
+    if (_trackingPollTimer?.isActive ?? false) return;
+    _trackingPollTimer = Timer.periodic(trackingPollInterval, (_) {
+      unawaited(_pollTracking(orderId));
+    });
+  }
+
+  Future<void> _pollTracking(
+    String orderId, {
+    bool clearOnFailure = false,
+  }) async {
+    if (_disposed || _trackedOrderId != orderId || _trackingPollInProgress) {
+      return;
+    }
+    _trackingPollInProgress = true;
+    var changed = false;
+    try {
+      final updated = AppOrder.fromJson(await api.getOrder(orderId));
+      if (_disposed || _trackedOrderId != orderId) return;
+      _replaceOrder(updated);
+      changed = true;
+      if (updated.driverId == null) {
+        tracking = null;
+      } else {
+        try {
+          tracking = TrackingInfo.fromJson(await api.getTracking(orderId));
+        } catch (_) {
+          if (clearOnFailure) tracking = null;
+        }
+      }
+      if (_isTerminal(updated.stage)) {
+        unawaited(stopWatchingTracking());
+      }
+    } catch (_) {
+      if (clearOnFailure) {
+        tracking = null;
+        changed = true;
+      }
+    } finally {
+      _trackingPollInProgress = false;
+      if (changed) _notifyIfActive();
+    }
+  }
+
+  void _scheduleTrackingReconnect(String orderId) {
+    if (_disposed ||
+        _trackedOrderId != orderId ||
+        (_trackingReconnectTimer?.isActive ?? false)) {
+      return;
+    }
+    final delay = _reconnectDelay(_trackingReconnectAttempts++);
+    _trackingReconnectTimer = Timer(delay, () {
+      _trackingReconnectTimer = null;
+      unawaited(_connectTrackingSocket(orderId));
+    });
   }
 
   Future<void> startLocationSharing(AppOrder order) async {
@@ -392,29 +606,156 @@ class ShishaGoStore extends ChangeNotifier {
   bool get isSharingLocation => _locationTimer != null;
   String? get sharingOrderId => _sharingOrderId;
 
-  void _listenForNotifications() {
-    _notificationChannel = api.notificationUpdates();
-    _notificationSubscription = _notificationChannel!.stream.listen((event) {
-      try {
-        final decoded = Map<String, dynamic>.from(
-          _decode(event is String ? event : event.toString()) as Map,
-        );
-        final payload = decoded['notification'];
-        if (payload is Map) {
-          final notification = AppNotification.fromJson(
-            Map<String, dynamic>.from(payload),
-          );
-          notifications.removeWhere((value) => value.id == notification.id);
-          notifications.insert(0, notification);
-          notifyListeners();
-          Timer(const Duration(milliseconds: 300), () {
-            refresh().catchError((_) {});
-          });
-        }
-      } catch (_) {
-        // A manual refresh retrieves any event with an invalid payload.
+  Future<void> _connectNotificationSocket() async {
+    if (_disposed) return;
+    _notificationReconnectTimer?.cancel();
+    _notificationReconnectTimer = null;
+
+    final previousSubscription = _notificationSubscription;
+    final previousChannel = _notificationChannel;
+    _notificationSubscription = null;
+    _notificationChannel = null;
+    await previousSubscription?.cancel();
+    await previousChannel?.sink.close();
+
+    WebSocketChannel? channel;
+    try {
+      final createdChannel = api.notificationUpdates();
+      channel = createdChannel;
+      _notificationChannel = createdChannel;
+      _notificationSubscription = createdChannel.stream.listen(
+        (event) => _handleNotificationEvent(createdChannel, event),
+        onError: (_) => _handleNotificationDisconnect(createdChannel),
+        onDone: () => _handleNotificationDisconnect(createdChannel),
+        cancelOnError: false,
+      );
+      await createdChannel.ready.timeout(connectionTimeout);
+    } catch (_) {
+      if (channel != null && identical(_notificationChannel, channel)) {
+        _handleNotificationDisconnect(channel);
+      } else if (_notificationChannel == null) {
+        _startNotificationPolling();
+        _scheduleNotificationReconnect();
       }
-    }, onError: (_) {});
+      return;
+    }
+    final connectedChannel = channel;
+    if (_disposed || !identical(_notificationChannel, connectedChannel)) {
+      await connectedChannel.sink.close();
+      return;
+    }
+    _notificationRealtimeConnected = true;
+    _notificationReconnectAttempts = 0;
+    _notificationPollTimer?.cancel();
+    _notificationPollTimer = null;
+    _notificationHeartbeatTimer?.cancel();
+    _notificationHeartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
+      try {
+        connectedChannel.sink.add('ping');
+        _notificationPongTimer?.cancel();
+        _notificationPongTimer = Timer(connectionTimeout, () {
+          _handleNotificationDisconnect(connectedChannel);
+          unawaited(connectedChannel.sink.close());
+        });
+      } catch (_) {
+        _handleNotificationDisconnect(connectedChannel);
+      }
+    });
+    _notifyIfActive();
+  }
+
+  void _handleNotificationEvent(WebSocketChannel channel, dynamic event) {
+    if (_disposed || !identical(_notificationChannel, channel)) return;
+    try {
+      final decoded = Map<String, dynamic>.from(
+        _decode(event is String ? event : event.toString()) as Map,
+      );
+      if (decoded['type'] == 'pong') {
+        _notificationPongTimer?.cancel();
+        _notificationPongTimer = null;
+        return;
+      }
+      final payload = decoded['notification'];
+      if (payload is Map) {
+        final notification = AppNotification.fromJson(
+          Map<String, dynamic>.from(payload),
+        );
+        notifications.removeWhere((value) => value.id == notification.id);
+        notifications.insert(0, notification);
+        _notifyIfActive();
+        Timer(const Duration(milliseconds: 300), () {
+          if (!_disposed) refresh().catchError((_) {});
+        });
+      }
+    } catch (_) {
+      unawaited(_pollNotifications());
+    }
+  }
+
+  void _handleNotificationDisconnect(WebSocketChannel channel) {
+    if (_disposed || !identical(_notificationChannel, channel)) return;
+    _notificationRealtimeConnected = false;
+    _notificationHeartbeatTimer?.cancel();
+    _notificationHeartbeatTimer = null;
+    _notificationPongTimer?.cancel();
+    _notificationPongTimer = null;
+    _startNotificationPolling();
+    _scheduleNotificationReconnect();
+    _notifyIfActive();
+  }
+
+  void _startNotificationPolling() {
+    if (_disposed) return;
+    unawaited(_pollNotifications());
+    if (_notificationPollTimer?.isActive ?? false) return;
+    _notificationPollTimer = Timer.periodic(notificationPollInterval, (_) {
+      unawaited(_pollNotifications());
+    });
+  }
+
+  Future<void> _pollNotifications() async {
+    if (_disposed || _notificationPollInProgress) return;
+    _notificationPollInProgress = true;
+    try {
+      notifications = (await api.getNotifications())
+          .map(AppNotification.fromJson)
+          .toList();
+      _notifyIfActive();
+    } catch (_) {
+      // The next timer tick or a recovered WebSocket retries synchronization.
+    } finally {
+      _notificationPollInProgress = false;
+    }
+  }
+
+  void _scheduleNotificationReconnect() {
+    if (_disposed || (_notificationReconnectTimer?.isActive ?? false)) return;
+    final delay = _reconnectDelay(_notificationReconnectAttempts++);
+    _notificationReconnectTimer = Timer(delay, () {
+      _notificationReconnectTimer = null;
+      unawaited(_connectNotificationSocket());
+    });
+  }
+
+  Duration _reconnectDelay(int attempt) {
+    final cappedAttempt = attempt.clamp(0, 10).toInt();
+    final multiplier = 1 << cappedAttempt;
+    final milliseconds = reconnectBaseDelay.inMilliseconds * multiplier;
+    return Duration(
+      milliseconds: milliseconds
+          .clamp(
+            reconnectBaseDelay.inMilliseconds,
+            reconnectMaxDelay.inMilliseconds,
+          )
+          .toInt(),
+    );
+  }
+
+  bool _isTerminal(OrderStage stage) =>
+      stage == OrderStage.completed || stage == OrderStage.cancelled;
+
+  void _notifyIfActive() {
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> loadNotifications() async {
@@ -460,7 +801,16 @@ class ShishaGoStore extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _locationTimer?.cancel();
+    _trackingPollTimer?.cancel();
+    _notificationPollTimer?.cancel();
+    _trackingReconnectTimer?.cancel();
+    _notificationReconnectTimer?.cancel();
+    _trackingHeartbeatTimer?.cancel();
+    _notificationHeartbeatTimer?.cancel();
+    _trackingPongTimer?.cancel();
+    _notificationPongTimer?.cancel();
     _trackingSubscription?.cancel();
     _notificationSubscription?.cancel();
     _trackingChannel?.sink.close();

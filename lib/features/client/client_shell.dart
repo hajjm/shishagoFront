@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -776,6 +778,12 @@ class _TrackingPageState extends State<TrackingPage> {
   void initState() {
     super.initState();
     widget.store.watchTracking(widget.order);
+  }
+
+  @override
+  void dispose() {
+    unawaited(widget.store.stopWatchingTracking());
+    super.dispose();
   }
 
   Future<void> callDriver(String phone) async {
