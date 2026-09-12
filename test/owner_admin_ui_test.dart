@@ -72,6 +72,12 @@ void main() {
     expect(controller.text, '12.34');
     await tester.enterText(priceField, '12.345');
     expect(controller.text, '12.34');
+
+    await tester.tap(find.text('Add option'));
+    await tester.pumpAndSettle();
+    expect(find.text('Option name'), findsOneWidget);
+    expect(find.text('Add choice'), findsOneWidget);
+    expect(find.text('Allow multiple choices'), findsOneWidget);
   });
 
   testWidgets('catalog separates Shisha and categorized Market items', (

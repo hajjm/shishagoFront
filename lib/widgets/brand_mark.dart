@@ -4,14 +4,13 @@ import '../core/app_theme.dart';
 
 /// The shared artwork used by every role and authentication screen.
 class BrandLogo extends StatelessWidget {
-  const BrandLogo({super.key, this.size = 48, this.blendColor});
+  const BrandLogo({super.key, this.size = 48});
 
   final double size;
-  final Color? blendColor;
 
   @override
   Widget build(BuildContext context) {
-    Widget logo = Image.asset(
+    final logo = Image.asset(
       'assets/branding/shishago-logo.jpeg',
       width: size,
       height: size,
@@ -19,12 +18,6 @@ class BrandLogo extends StatelessWidget {
       semanticLabel: 'Shisha Go logo',
       filterQuality: FilterQuality.high,
     );
-    if (blendColor != null) {
-      logo = ColorFiltered(
-        colorFilter: ColorFilter.mode(blendColor!, BlendMode.multiply),
-        child: Opacity(opacity: 0.96, child: logo),
-      );
-    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.16),
       child: logo,
@@ -33,16 +26,10 @@ class BrandLogo extends StatelessWidget {
 }
 
 class BrandMark extends StatelessWidget {
-  const BrandMark({
-    super.key,
-    this.light = false,
-    this.compact = false,
-    this.logoBlendColor,
-  });
+  const BrandMark({super.key, this.light = false, this.compact = false});
 
   final bool light;
   final bool compact;
-  final Color? logoBlendColor;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +37,7 @@ class BrandMark extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        BrandLogo(size: compact ? 40 : 56, blendColor: logoBlendColor),
+        BrandLogo(size: compact ? 40 : 56),
         const SizedBox(width: 10),
         Text(
           'Shisha Go',

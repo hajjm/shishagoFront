@@ -41,6 +41,59 @@ class MarketCategory {
   final bool isActive;
 }
 
+class ProductCustomizationChoice {
+  const ProductCustomizationChoice({
+    required this.id,
+    required this.name,
+    required this.priceAdjustment,
+    required this.isAvailable,
+  });
+
+  factory ProductCustomizationChoice.fromJson(Map<String, dynamic> json) =>
+      ProductCustomizationChoice(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        priceAdjustment: (json['price_adjustment'] as num).toDouble(),
+        isAvailable: json['is_available'] as bool? ?? true,
+      );
+
+  final String id;
+  final String name;
+  final double priceAdjustment;
+  final bool isAvailable;
+}
+
+class ProductCustomizationOption {
+  const ProductCustomizationOption({
+    required this.id,
+    required this.name,
+    required this.minSelections,
+    required this.maxSelections,
+    required this.choices,
+  });
+
+  factory ProductCustomizationOption.fromJson(Map<String, dynamic> json) =>
+      ProductCustomizationOption(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        minSelections: json['min_selections'] as int,
+        maxSelections: json['max_selections'] as int,
+        choices: (json['choices'] as List<dynamic>)
+            .map(
+              (value) => ProductCustomizationChoice.fromJson(
+                value as Map<String, dynamic>,
+              ),
+            )
+            .toList(),
+      );
+
+  final String id;
+  final String name;
+  final int minSelections;
+  final int maxSelections;
+  final List<ProductCustomizationChoice> choices;
+}
+
 enum OrderStage { pending, accepted, preparing, onTheWay, completed, cancelled }
 
 extension OrderStageLabel on OrderStage {
@@ -116,6 +169,7 @@ class Product {
     this.marketCategoryName,
     this.imageUrl,
     this.available = true,
+    this.customizationOptions = const [],
   });
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -130,6 +184,14 @@ class Product {
     marketCategoryName: json['market_category_name'] as String?,
     imageUrl: json['image_url'] as String?,
     available: json['is_available'] as bool? ?? true,
+    customizationOptions:
+        (json['customization_options'] as List<dynamic>? ?? const [])
+            .map(
+              (value) => ProductCustomizationOption.fromJson(
+                value as Map<String, dynamic>,
+              ),
+            )
+            .toList(),
   );
 
   final String id;
@@ -141,6 +203,7 @@ class Product {
   final String? marketCategoryName;
   final String? imageUrl;
   final bool available;
+  final List<ProductCustomizationOption> customizationOptions;
 
   IconData get icon => category == ProductCategory.chicha
       ? Icons.local_fire_department_rounded
@@ -154,6 +217,7 @@ class OrderLine {
     required this.category,
     required this.quantity,
     required this.unitPrice,
+    this.customizations = const [],
   });
 
   factory OrderLine.fromJson(Map<String, dynamic> json) => OrderLine(
@@ -164,6 +228,12 @@ class OrderLine {
         : ProductCategory.chicha,
     quantity: json['quantity'] as int,
     unitPrice: (json['unit_price'] as num).toDouble(),
+    customizations: (json['customizations'] as List<dynamic>? ?? const [])
+        .map(
+          (value) =>
+              OrderLineCustomization.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(),
   );
 
   final String productId;
@@ -171,6 +241,32 @@ class OrderLine {
   final ProductCategory category;
   final int quantity;
   final double unitPrice;
+  final List<OrderLineCustomization> customizations;
+}
+
+class OrderLineCustomization {
+  const OrderLineCustomization({
+    required this.optionId,
+    required this.optionName,
+    required this.choiceId,
+    required this.choiceName,
+    required this.priceAdjustment,
+  });
+
+  factory OrderLineCustomization.fromJson(Map<String, dynamic> json) =>
+      OrderLineCustomization(
+        optionId: json['option_id'] as String,
+        optionName: json['option_name'] as String,
+        choiceId: json['choice_id'] as String,
+        choiceName: json['choice_name'] as String,
+        priceAdjustment: (json['price_adjustment'] as num).toDouble(),
+      );
+
+  final String optionId;
+  final String optionName;
+  final String choiceId;
+  final String choiceName;
+  final double priceAdjustment;
 }
 
 class AppOrder {
@@ -228,8 +324,14 @@ class AppOrder {
   final double latitude;
   final double longitude;
 
-  String get items =>
-      lines.map((line) => '${line.productName} × ${line.quantity}').join(', ');
+  String get items => lines
+      .map((line) {
+        final choices = line.customizations
+            .map((value) => value.choiceName)
+            .join(', ');
+        return '${line.productName}${choices.isEmpty ? '' : ' ($choices)'} × ${line.quantity}';
+      })
+      .join(', ');
 }
 
 class TrackingInfo {

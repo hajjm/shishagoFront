@@ -24,9 +24,7 @@ void main() {
     expect(find.text('Use my current location'), findsOneWidget);
   });
 
-  testWidgets('desktop login blends the logo into the hero panel', (
-    tester,
-  ) async {
+  testWidgets('desktop login keeps the original logo colors', (tester) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -35,6 +33,7 @@ void main() {
     await tester.pumpWidget(const ShishaGoApp(skipRestore: true));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ColorFiltered), findsOneWidget);
+    expect(find.byType(ColorFiltered), findsNothing);
+    expect(find.bySemanticsLabel('Shisha Go logo'), findsOneWidget);
   });
 }

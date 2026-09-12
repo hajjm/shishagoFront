@@ -25,6 +25,37 @@ AppOrder order(String id, OrderStage stage) => AppOrder(
 );
 
 void main() {
+  testWidgets('client navigation has no standalone Track tab', (tester) async {
+    final api = ShishaGoApi(baseUrl: 'http://127.0.0.1:8001');
+    final session = SessionController(api)
+      ..user = const AppUser(
+        id: 'client-1',
+        name: 'Client One',
+        phone: '+96170000001',
+        role: UserRole.client,
+        address: 'Beirut',
+        latitude: 33.89,
+        longitude: 35.50,
+        isActive: true,
+        phoneVerified: true,
+      );
+    final store = ShishaGoStore(api: api, session: session);
+    addTearDown(store.dispose);
+    addTearDown(api.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ClientShell(store: store, session: session),
+      ),
+    );
+
+    expect(find.byType(NavigationDestination), findsNWidgets(3));
+    expect(find.text('Shop'), findsOneWidget);
+    expect(find.text('Orders'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Track'), findsNothing);
+  });
+
   testWidgets('orders expose pending cancellation and specific tracking', (
     tester,
   ) async {

@@ -27,56 +27,61 @@ class _ClientShellState extends State<ClientShell> {
   void trackOrder(AppOrder order) {
     setState(() {
       trackingOrderId = order.id;
-      selectedIndex = 2;
+      selectedIndex = 1;
+    });
+  }
+
+  void closeTracking() {
+    setState(() {
+      trackingOrderId = null;
+      selectedIndex = 1;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final activeOrders = widget.store.orders
-        .where(
-          (order) => !{
-            OrderStage.pending,
-            OrderStage.completed,
-            OrderStage.cancelled,
-          }.contains(order.stage),
-        )
-        .toList();
     AppOrder? trackingOrder;
-    for (final order in activeOrders) {
+    for (final order in widget.store.orders) {
       if (order.id == trackingOrderId) {
         trackingOrder = order;
         break;
       }
     }
-    if (trackingOrder == null && activeOrders.isNotEmpty) {
-      trackingOrder = activeOrders.first;
-    }
     final pages = [
       ShopPage(store: widget.store, user: widget.session.user!),
       OrdersPage(store: widget.store, onTrack: trackOrder),
-      trackingOrder == null
-          ? const _NoActiveDelivery()
-          : TrackingPage(
-              key: ValueKey(trackingOrder.id),
-              store: widget.store,
-              order: trackingOrder,
-            ),
       ProfilePage(session: widget.session),
     ];
+    final showingTracking = trackingOrder != null;
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: showingTracking
+            ? IconButton(
+                tooltip: 'Back to orders',
+                onPressed: closeTracking,
+                icon: const Icon(Icons.arrow_back_rounded),
+              )
+            : null,
         title: const BrandMark(compact: true),
         actions: [
           NotificationsButton(store: widget.store),
           const SizedBox(width: 8),
         ],
       ),
-      body: IndexedStack(index: selectedIndex, children: pages),
+      body: showingTracking
+          ? TrackingPage(
+              key: ValueKey(trackingOrder.id),
+              store: widget.store,
+              order: trackingOrder,
+            )
+          : IndexedStack(index: selectedIndex, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
-        onDestinationSelected: (index) => setState(() => selectedIndex = index),
+        onDestinationSelected: (index) => setState(() {
+          trackingOrderId = null;
+          selectedIndex = index;
+        }),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
@@ -87,11 +92,6 @@ class _ClientShellState extends State<ClientShell> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long_rounded),
             label: 'Orders',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.location_on_outlined),
-            selectedIcon: Icon(Icons.location_on_rounded),
-            label: 'Track',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
@@ -422,8 +422,17 @@ class ProductCard extends StatelessWidget {
                 const Spacer(),
                 if (quantity == 0)
                   IconButton.filled(
-                    onPressed: () => store.addToCart(product),
-                    icon: const Icon(Icons.add_rounded),
+                    tooltip: product.customizationOptions.isEmpty
+                        ? 'Add to order'
+                        : 'Customize and add',
+                    onPressed: () => product.customizationOptions.isEmpty
+                        ? store.addToCart(product)
+                        : showProductCustomizer(context, product, store),
+                    icon: Icon(
+                      product.customizationOptions.isEmpty
+                          ? Icons.add_rounded
+                          : Icons.tune_rounded,
+                    ),
                   )
                 else
                   Row(
@@ -437,8 +446,17 @@ class ProductCard extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       IconButton(
-                        onPressed: () => store.addToCart(product),
-                        icon: const Icon(Icons.add_rounded),
+                        tooltip: product.customizationOptions.isEmpty
+                            ? 'Add another'
+                            : 'Customize another',
+                        onPressed: () => product.customizationOptions.isEmpty
+                            ? store.addToCart(product)
+                            : showProductCustomizer(context, product, store),
+                        icon: Icon(
+                          product.customizationOptions.isEmpty
+                              ? Icons.add_rounded
+                              : Icons.tune_rounded,
+                        ),
                       ),
                     ],
                   ),
@@ -449,6 +467,140 @@ class ProductCard extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> showProductCustomizer(
+  BuildContext context,
+  Product product,
+  ShishaGoStore store,
+) async {
+  final selections = <String, Set<String>>{};
+  String? selectionError;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final adjustment = product.customizationOptions.fold<double>(0, (
+          total,
+          option,
+        ) {
+          final selected = selections[option.id] ?? const <String>{};
+          return total +
+              option.choices
+                  .where((choice) => selected.contains(choice.id))
+                  .fold<double>(
+                    0,
+                    (sum, choice) => sum + choice.priceAdjustment,
+                  );
+        });
+        return AlertDialog(
+          title: Text('Customize ${product.name}'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final option in product.customizationOptions) ...[
+                    Text(
+                      option.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      option.minSelections > 0
+                          ? option.maxSelections == 1
+                                ? 'Required · choose one'
+                                : 'Required · choose ${option.minSelections}–${option.maxSelections}'
+                          : 'Optional · choose up to ${option.maxSelections}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: option.choices
+                          .where((choice) => choice.isAvailable)
+                          .map((choice) {
+                            final selected =
+                                selections[option.id]?.contains(choice.id) ??
+                                false;
+                            return FilterChip(
+                              selected: selected,
+                              label: Text(
+                                '${choice.name}${choice.priceAdjustment == 0 ? '' : ' (+\$${choice.priceAdjustment.toStringAsFixed(2)})'}',
+                              ),
+                              onSelected: (value) => setState(() {
+                                final current = selections.putIfAbsent(
+                                  option.id,
+                                  () => <String>{},
+                                );
+                                selectionError = null;
+                                if (!value) {
+                                  current.remove(choice.id);
+                                } else if (option.maxSelections == 1) {
+                                  current
+                                    ..clear()
+                                    ..add(choice.id);
+                                } else if (current.length <
+                                    option.maxSelections) {
+                                  current.add(choice.id);
+                                } else {
+                                  selectionError =
+                                      'Choose at most ${option.maxSelections} for ${option.name}';
+                                }
+                              }),
+                            );
+                          })
+                          .toList(),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                  if (selectionError != null)
+                    Text(
+                      selectionError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                for (final option in product.customizationOptions) {
+                  final count = selections[option.id]?.length ?? 0;
+                  if (count < option.minSelections ||
+                      count > option.maxSelections) {
+                    setState(() {
+                      selectionError =
+                          '${option.name} requires ${option.minSelections} to ${option.maxSelections} selections';
+                    });
+                    return;
+                  }
+                }
+                store.addToCart(product, selections: selections);
+                Navigator.pop(context);
+              },
+              icon: const Icon(Icons.add_shopping_cart_rounded),
+              label: Text(
+                'Add · \$${(product.price + adjustment).toStringAsFixed(2)}',
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 class OrdersPage extends StatelessWidget {
@@ -790,35 +942,6 @@ class _TrackingPageState extends State<TrackingPage> {
         ],
       );
     },
-  );
-}
-
-class _NoActiveDelivery extends StatelessWidget {
-  const _NoActiveDelivery();
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.location_off_outlined,
-            size: 58,
-            color: AppColors.muted,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'No active delivery',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const Text(
-            'Live tracking appears after your order is accepted and a driver is assigned.',
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    ),
   );
 }
 

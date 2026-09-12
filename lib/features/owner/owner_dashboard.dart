@@ -716,7 +716,7 @@ class _OwnerCatalogPageState extends State<OwnerCatalogPage> {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: Text(
-                  '${product.category == ProductCategory.market ? product.marketCategoryName ?? 'Market' : 'Shisha'} · ${product.available ? 'Available' : 'Hidden'}',
+                  '${product.category == ProductCategory.market ? product.marketCategoryName ?? 'Market' : 'Shisha'} · ${product.available ? 'Available' : 'Hidden'}${product.customizationOptions.isEmpty ? '' : ' · ${product.customizationOptions.length} customization option${product.customizationOptions.length == 1 ? '' : 's'}'}',
                 ),
                 trailing: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -793,7 +793,27 @@ Future<void> showMarketCategoryEditor(
       ),
     ),
   );
-  name.dispose();
+}
+
+class _CustomizationChoiceDraft {
+  _CustomizationChoiceDraft({this.name = '', this.priceAdjustment = 0});
+
+  String name;
+  double priceAdjustment;
+}
+
+class _CustomizationOptionDraft {
+  _CustomizationOptionDraft({
+    this.name = '',
+    this.required = false,
+    this.allowMultiple = false,
+    List<_CustomizationChoiceDraft>? choices,
+  }) : choices = choices ?? [_CustomizationChoiceDraft()];
+
+  String name;
+  bool required;
+  bool allowMultiple;
+  final List<_CustomizationChoiceDraft> choices;
 }
 
 Future<void> showProductEditor(
@@ -805,6 +825,25 @@ Future<void> showProductEditor(
   final name = TextEditingController(text: product?.name);
   final description = TextEditingController(text: product?.description);
   final price = TextEditingController(text: product?.price.toString());
+  final customizationOptions =
+      product?.customizationOptions
+          .map(
+            (option) => _CustomizationOptionDraft(
+              name: option.name,
+              required: option.minSelections > 0,
+              allowMultiple: option.maxSelections > 1,
+              choices: option.choices
+                  .map(
+                    (choice) => _CustomizationChoiceDraft(
+                      name: choice.name,
+                      priceAdjustment: choice.priceAdjustment,
+                    ),
+                  )
+                  .toList(),
+            ),
+          )
+          .toList() ??
+      [];
   var category = product?.category ?? initialCategory ?? ProductCategory.chicha;
   String? marketCategoryId = product?.marketCategoryId;
   if (category == ProductCategory.market && marketCategoryId == null) {
@@ -818,6 +857,7 @@ Future<void> showProductEditor(
   var available = product?.available ?? true;
   String? priceError;
   String? categoryError;
+  String? customizationError;
   await showDialog<void>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -912,6 +952,183 @@ Future<void> showProductEditor(
                 onChanged: (value) => setState(() => available = value),
                 title: const Text('Available'),
               ),
+              const Divider(height: 28),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Customization options',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => setState(
+                      () =>
+                          customizationOptions.add(_CustomizationOptionDraft()),
+                    ),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add option'),
+                  ),
+                ],
+              ),
+              if (customizationOptions.isEmpty)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'No customization. Clients add this item directly.',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
+                ),
+              for (
+                var optionIndex = 0;
+                optionIndex < customizationOptions.length;
+                optionIndex++
+              )
+                Card(
+                  margin: const EdgeInsets.only(top: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue:
+                                    customizationOptions[optionIndex].name,
+                                onChanged: (value) =>
+                                    customizationOptions[optionIndex].name =
+                                        value,
+                                decoration: const InputDecoration(
+                                  labelText: 'Option name',
+                                  hintText: 'For example, Bowl size',
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Remove option',
+                              onPressed: () => setState(
+                                () =>
+                                    customizationOptions.removeAt(optionIndex),
+                              ),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                          ],
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: customizationOptions[optionIndex].required,
+                          onChanged: (value) => setState(
+                            () => customizationOptions[optionIndex].required =
+                                value,
+                          ),
+                          title: const Text('Required'),
+                          dense: true,
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value:
+                              customizationOptions[optionIndex].allowMultiple,
+                          onChanged: (value) => setState(
+                            () =>
+                                customizationOptions[optionIndex]
+                                        .allowMultiple =
+                                    value,
+                          ),
+                          title: const Text('Allow multiple choices'),
+                          dense: true,
+                        ),
+                        for (
+                          var choiceIndex = 0;
+                          choiceIndex <
+                              customizationOptions[optionIndex].choices.length;
+                          choiceIndex++
+                        )
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    initialValue:
+                                        customizationOptions[optionIndex]
+                                            .choices[choiceIndex]
+                                            .name,
+                                    onChanged: (value) =>
+                                        customizationOptions[optionIndex]
+                                                .choices[choiceIndex]
+                                                .name =
+                                            value,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Choice',
+                                      hintText: 'For example, Large',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 112,
+                                  child: TextFormField(
+                                    initialValue:
+                                        customizationOptions[optionIndex]
+                                            .choices[choiceIndex]
+                                            .priceAdjustment
+                                            .toStringAsFixed(2),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    inputFormatters: [_priceInputFormatter],
+                                    onChanged: (value) =>
+                                        customizationOptions[optionIndex]
+                                                .choices[choiceIndex]
+                                                .priceAdjustment =
+                                            double.tryParse(value) ?? 0,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Extra price',
+                                      prefixText: '\$',
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Remove choice',
+                                  onPressed: () => setState(
+                                    () => customizationOptions[optionIndex]
+                                        .choices
+                                        .removeAt(choiceIndex),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline_rounded,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () => setState(
+                              () => customizationOptions[optionIndex].choices
+                                  .add(_CustomizationChoiceDraft()),
+                            ),
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('Add choice'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (customizationError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    customizationError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -932,6 +1149,18 @@ Future<void> showProductEditor(
                 setState(() => categoryError = 'Choose a market category');
                 return;
               }
+              if (customizationOptions.any(
+                (option) =>
+                    option.name.trim().isEmpty ||
+                    option.choices.isEmpty ||
+                    option.choices.any((choice) => choice.name.trim().isEmpty),
+              )) {
+                setState(() {
+                  customizationError =
+                      'Every option needs a name and at least one named choice';
+                });
+                return;
+              }
               await store.saveProduct(
                 existing: product,
                 name: name.text,
@@ -940,6 +1169,26 @@ Future<void> showProductEditor(
                 marketCategoryId: marketCategoryId,
                 price: parsedPrice,
                 available: available,
+                customizationOptions: customizationOptions
+                    .map(
+                      (option) => {
+                        'name': option.name.trim(),
+                        'min_selections': option.required ? 1 : 0,
+                        'max_selections': option.allowMultiple
+                            ? option.choices.length
+                            : 1,
+                        'choices': option.choices
+                            .map(
+                              (choice) => {
+                                'name': choice.name.trim(),
+                                'price_adjustment': choice.priceAdjustment,
+                                'is_available': true,
+                              },
+                            )
+                            .toList(),
+                      },
+                    )
+                    .toList(),
               );
               if (context.mounted) Navigator.pop(context);
             },
@@ -949,9 +1198,6 @@ Future<void> showProductEditor(
       ),
     ),
   );
-  name.dispose();
-  description.dispose();
-  price.dispose();
 }
 
 final _priceInputFormatter = TextInputFormatter.withFunction((

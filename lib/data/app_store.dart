@@ -12,6 +12,19 @@ import '../services/session_controller.dart';
 
 const driverLocationUpdateInterval = Duration(seconds: 10);
 
+class _CartEntry {
+  _CartEntry({
+    required this.product,
+    required this.selections,
+    required this.unitPrice,
+  }) : quantity = 1;
+
+  final Product product;
+  final Map<String, List<String>> selections;
+  final double unitPrice;
+  int quantity;
+}
+
 class ShishaGoStore extends ChangeNotifier {
   ShishaGoStore({required this.api, required this.session});
 
@@ -27,7 +40,7 @@ class ShishaGoStore extends ChangeNotifier {
   TrackingInfo? tracking;
   bool loading = false;
   String? error;
-  final Map<String, int> _cart = {};
+  final Map<String, _CartEntry> _cart = {};
   Timer? _locationTimer;
   String? _sharingOrderId;
   bool _locationUpdateInProgress = false;
@@ -36,14 +49,17 @@ class ShishaGoStore extends ChangeNotifier {
   WebSocketChannel? _trackingChannel;
   WebSocketChannel? _notificationChannel;
 
-  int get cartCount => _cart.values.fold(0, (sum, quantity) => sum + quantity);
+  int get cartCount =>
+      _cart.values.fold(0, (sum, entry) => sum + entry.quantity);
 
-  double get cartTotal => _cart.entries.fold(0, (sum, entry) {
-    final product = products.firstWhere((item) => item.id == entry.key);
-    return sum + product.price * entry.value;
-  });
+  double get cartTotal => _cart.values.fold(
+    0,
+    (sum, entry) => sum + entry.unitPrice * entry.quantity,
+  );
 
-  int quantityFor(String productId) => _cart[productId] ?? 0;
+  int quantityFor(String productId) => _cart.values
+      .where((entry) => entry.product.id == productId)
+      .fold(0, (sum, entry) => sum + entry.quantity);
 
   Future<void> initialize() async {
     await refresh();
@@ -84,17 +100,55 @@ class ShishaGoStore extends ChangeNotifier {
     )).map(AppOrder.fromJson).toList();
   });
 
-  void addToCart(Product product) {
-    _cart.update(product.id, (value) => value + 1, ifAbsent: () => 1);
+  void addToCart(
+    Product product, {
+    Map<String, Set<String>> selections = const {},
+  }) {
+    final normalizedSelections = {
+      for (final entry in selections.entries)
+        entry.key: (entry.value.toList()..sort()),
+    };
+    final signatureParts = normalizedSelections.entries.toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+    final key =
+        '${product.id}|${signatureParts.map((entry) => '${entry.key}:${entry.value.join(',')}').join('|')}';
+    final priceAdjustment = product.customizationOptions.fold<double>(0, (
+      sum,
+      option,
+    ) {
+      final selected = normalizedSelections[option.id] ?? const <String>[];
+      return sum +
+          option.choices
+              .where((choice) => selected.contains(choice.id))
+              .fold<double>(
+                0,
+                (value, choice) => value + choice.priceAdjustment,
+              );
+    });
+    final existing = _cart[key];
+    if (existing == null) {
+      _cart[key] = _CartEntry(
+        product: product,
+        selections: normalizedSelections,
+        unitPrice: product.price + priceAdjustment,
+      );
+    } else {
+      existing.quantity += 1;
+    }
     notifyListeners();
   }
 
   void removeFromCart(Product product) {
-    final quantity = _cart[product.id] ?? 0;
-    if (quantity <= 1) {
-      _cart.remove(product.id);
+    final matchingKey = _cart.keys.lastWhere(
+      (key) => _cart[key]!.product.id == product.id,
+      orElse: () => '',
+    );
+    if (matchingKey.isEmpty) return;
+    final entry = _cart[matchingKey]!;
+    if (entry.quantity <= 1) {
+      _cart.remove(matchingKey);
     } else {
-      _cart[product.id] = quantity - 1;
+      entry.quantity -= 1;
     }
     notifyListeners();
   }
@@ -108,8 +162,21 @@ class ShishaGoStore extends ChangeNotifier {
       );
     }
     final response = await api.createOrder(
-      items: _cart.entries
-          .map((entry) => {'product_id': entry.key, 'quantity': entry.value})
+      items: _cart.values
+          .map(
+            (entry) => {
+              'product_id': entry.product.id,
+              'quantity': entry.quantity,
+              'selections': entry.selections.entries
+                  .map(
+                    (selection) => {
+                      'option_id': selection.key,
+                      'choice_ids': selection.value,
+                    },
+                  )
+                  .toList(),
+            },
+          )
           .toList(),
       address: user.address,
       latitude: user.latitude!,
@@ -151,6 +218,7 @@ class ShishaGoStore extends ChangeNotifier {
     String? marketCategoryId,
     required double price,
     required bool available,
+    List<Map<String, dynamic>> customizationOptions = const [],
   }) => _run(() async {
     final payload = {
       'name': name,
@@ -161,6 +229,7 @@ class ShishaGoStore extends ChangeNotifier {
           : null,
       'price': price,
       'is_available': available,
+      'customization_options': customizationOptions,
     };
     if (existing == null) {
       products.add(Product.fromJson(await api.createItem(payload)));
