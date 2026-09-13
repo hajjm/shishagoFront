@@ -75,6 +75,15 @@ class ShishaGoApi {
     authenticated: true,
   );
 
+  Future<void> deleteItem(String productId) async {
+    final response = await _send(
+      'DELETE',
+      '/items/$productId',
+      authenticated: true,
+    );
+    _ensureSuccess(response);
+  }
+
   Future<List<Map<String, dynamic>>> getMarketCategories({
     bool activeOnly = true,
   }) => _listRequest('GET', '/market-categories?active_only=$activeOnly');
@@ -88,6 +97,7 @@ class ShishaGoApi {
 
   Future<List<Map<String, dynamic>>> getOrders({
     String? status,
+    String? search,
     DateTime? dateFrom,
     DateTime? dateTo,
     String sortBy = 'created_at',
@@ -97,6 +107,7 @@ class ShishaGoApi {
       'sort_by': sortBy,
       'sort_order': sortOrder,
       'status': ?status,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       if (dateFrom != null) 'date_from': _date(dateFrom),
       if (dateTo != null) 'date_to': _date(dateTo),
     };
@@ -115,6 +126,7 @@ class ShishaGoApi {
     required String address,
     required double latitude,
     required double longitude,
+    String? deliveryLocationId,
     String notes = '',
   }) => _mapRequest(
     'POST',
@@ -125,9 +137,51 @@ class ShishaGoApi {
       'delivery_address': address,
       'delivery_latitude': latitude,
       'delivery_longitude': longitude,
+      'delivery_location_id': deliveryLocationId,
       'notes': notes,
     },
   );
+
+  Future<List<Map<String, dynamic>>> getSavedLocations() =>
+      _listRequest('GET', '/locations', authenticated: true);
+
+  Future<Map<String, dynamic>> createSavedLocation({
+    required String label,
+    required String address,
+    required double latitude,
+    required double longitude,
+    bool isDefault = false,
+  }) => _mapRequest(
+    'POST',
+    '/locations',
+    authenticated: true,
+    body: {
+      'label': label,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+      'is_default': isDefault,
+    },
+  );
+
+  Future<Map<String, dynamic>> updateSavedLocation(
+    String locationId,
+    Map<String, dynamic> changes,
+  ) => _mapRequest(
+    'PATCH',
+    '/locations/$locationId',
+    authenticated: true,
+    body: changes,
+  );
+
+  Future<void> deleteSavedLocation(String locationId) async {
+    final response = await _send(
+      'DELETE',
+      '/locations/$locationId',
+      authenticated: true,
+    );
+    _ensureSuccess(response);
+  }
 
   Future<Map<String, dynamic>> reorder(String orderId) =>
       _mapRequest('POST', '/orders/$orderId/reorder', authenticated: true);
@@ -219,6 +273,7 @@ class ShishaGoApi {
 
   Future<Uint8List> exportOrders({
     String? status,
+    String? search,
     DateTime? dateFrom,
     DateTime? dateTo,
     String sortBy = 'created_at',
@@ -227,6 +282,7 @@ class ShishaGoApi {
     final query = Uri(
       queryParameters: {
         'status': ?status,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (dateFrom != null) 'date_from': _date(dateFrom),
         if (dateTo != null) 'date_to': _date(dateTo),
         'sort_by': sortBy,

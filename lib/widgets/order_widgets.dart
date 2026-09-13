@@ -22,6 +22,11 @@ class OrderStatusPill extends StatelessWidget {
       ),
       OrderStage.onTheWay => (AppColors.ember, Icons.delivery_dining_rounded),
       OrderStage.completed => (AppColors.sage, Icons.check_circle_rounded),
+      OrderStage.finishedUsing => (
+        Colors.purple.shade700,
+        Icons.hourglass_bottom_rounded,
+      ),
+      OrderStage.collected => (Colors.teal.shade700, Icons.inventory_2_rounded),
       OrderStage.cancelled => (Colors.red.shade700, Icons.cancel_outlined),
     };
     return Container(

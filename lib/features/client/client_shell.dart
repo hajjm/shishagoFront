@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_theme.dart';
@@ -11,6 +12,7 @@ import '../../services/session_controller.dart';
 import '../../widgets/brand_mark.dart';
 import '../../widgets/notifications_button.dart';
 import '../../widgets/order_widgets.dart';
+import 'checkout_page.dart';
 
 class ClientShell extends StatefulWidget {
   const ClientShell({super.key, required this.store, required this.session});
@@ -120,18 +122,14 @@ class _ShopPageState extends State<ShopPage> {
   ProductCategory category = ProductCategory.chicha;
   String? marketCategoryId;
 
-  Future<void> checkout() async {
-    try {
-      final order = await widget.store.checkout();
-      if (!mounted) return;
+  Future<void> openCheckout() async {
+    final order = await Navigator.of(context).push<AppOrder>(
+      MaterialPageRoute(builder: (_) => CheckoutPage(store: widget.store)),
+    );
+    if (order != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${order.reference} was placed successfully')),
       );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -327,8 +325,8 @@ class _ShopPageState extends State<ShopPage> {
                                   trailing: FilledButton.tonal(
                                     onPressed: widget.store.loading
                                         ? null
-                                        : checkout,
-                                    child: const Text('Place order'),
+                                        : openCheckout,
+                                    child: const Text('Review order'),
                                   ),
                                 ),
                               ),
@@ -649,6 +647,38 @@ class OrdersPage extends StatelessWidget {
     }
   }
 
+  Future<void> finishUsing(BuildContext context, AppOrder order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Finished using the shisha?'),
+        content: const Text(
+          'The driver and owner will be notified that it is ready for collection.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not yet'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Finished using'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await store.changeOrderStatus(order, OrderStage.finishedUsing);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: store,
@@ -734,7 +764,36 @@ class OrdersPage extends StatelessWidget {
                           icon: const Icon(Icons.location_on_rounded),
                           label: const Text('Track order'),
                         ),
-                      ] else if (order.stage == OrderStage.completed) ...[
+                      ] else if (order.stage == OrderStage.completed &&
+                          order.hasShisha) ...[
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: store.loading
+                              ? null
+                              : () => finishUsing(context, order),
+                          icon: const Icon(Icons.done_all_rounded),
+                          label: const Text('I finished using the shisha'),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'This will happen automatically four hours after delivery.',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ] else if (order.stage == OrderStage.finishedUsing) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Ready for collection. Your driver has been notified.',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ] else if (order.stage == OrderStage.collected ||
+                          (order.stage == OrderStage.completed &&
+                              !order.hasShisha)) ...[
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
                           onPressed: () async {
@@ -838,63 +897,11 @@ class _TrackingPageState extends State<TrackingPage> {
             style: const TextStyle(color: AppColors.muted),
           ),
           const SizedBox(height: 20),
-          Container(
-            height: 300,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE7E2D8),
-              borderRadius: BorderRadius.circular(26),
-            ),
-            child: Stack(
-              children: [
-                ...List.generate(
-                  5,
-                  (index) => Positioned(
-                    left: 25.0 + index * 70,
-                    top: 0,
-                    bottom: 0,
-                    child: Transform.rotate(
-                      angle: 0.35,
-                      child: Container(width: 2, color: Colors.white70),
-                    ),
-                  ),
-                ),
-                const Positioned(
-                  left: 52,
-                  bottom: 44,
-                  child: _MapPin(
-                    icon: Icons.home_rounded,
-                    color: AppColors.ink,
-                  ),
-                ),
-                if (hasDriver)
-                  Positioned(
-                    left: atStore ? 82 : null,
-                    bottom: atStore ? 48 : null,
-                    right: atStore ? null : 78,
-                    top: atStore ? null : 72,
-                    child: const _MapPin(
-                      icon: Icons.delivery_dining_rounded,
-                      color: AppColors.ember,
-                    ),
-                  ),
-                Positioned(
-                  left: 18,
-                  top: 18,
-                  child: Chip(
-                    avatar: const Icon(Icons.gps_fixed_rounded, size: 17),
-                    label: Text(
-                      tracking?.latitude == null
-                          ? !hasDriver
-                                ? 'Waiting for driver assignment'
-                                : atStore
-                                ? 'Driver is at the Shisha Go store'
-                                : 'Waiting for driver GPS'
-                          : '${tracking!.latitude!.toStringAsFixed(5)}, ${tracking.longitude!.toStringAsFixed(5)}',
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          _TrackingMap(
+            order: order,
+            tracking: tracking,
+            hasDriver: hasDriver,
+            atStore: atStore,
           ),
           const SizedBox(height: 16),
           Card(
@@ -953,20 +960,160 @@ class _TrackingPageState extends State<TrackingPage> {
   );
 }
 
-class _MapPin extends StatelessWidget {
-  const _MapPin({required this.icon, required this.color});
-  final IconData icon;
-  final Color color;
+class _TrackingMap extends StatefulWidget {
+  const _TrackingMap({
+    required this.order,
+    required this.tracking,
+    required this.hasDriver,
+    required this.atStore,
+  });
+
+  final AppOrder order;
+  final TrackingInfo? tracking;
+  final bool hasDriver;
+  final bool atStore;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: color,
-      shape: BoxShape.circle,
-      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 12)],
-    ),
-    child: Icon(icon, color: Colors.white),
-  );
+  State<_TrackingMap> createState() => _TrackingMapState();
+}
+
+class _TrackingMapState extends State<_TrackingMap> {
+  GoogleMapController? controller;
+  String? lastCameraSignature;
+
+  LatLng get destination =>
+      LatLng(widget.order.latitude, widget.order.longitude);
+
+  LatLng? get driverPosition {
+    final latitude = widget.tracking?.latitude;
+    final longitude = widget.tracking?.longitude;
+    return latitude == null || longitude == null
+        ? null
+        : LatLng(latitude, longitude);
+  }
+
+  Future<void> fitMarkers() async {
+    final mapController = controller;
+    final driver = driverPosition;
+    if (mapController == null || driver == null) return;
+    final signature = '${driver.latitude},${driver.longitude}';
+    if (signature == lastCameraSignature) return;
+    lastCameraSignature = signature;
+    final south = driver.latitude < destination.latitude
+        ? driver.latitude
+        : destination.latitude;
+    final west = driver.longitude < destination.longitude
+        ? driver.longitude
+        : destination.longitude;
+    final north = driver.latitude > destination.latitude
+        ? driver.latitude
+        : destination.latitude;
+    final east = driver.longitude > destination.longitude
+        ? driver.longitude
+        : destination.longitude;
+    if (south == north && west == east) {
+      await mapController.animateCamera(CameraUpdate.newLatLngZoom(driver, 17));
+      return;
+    }
+    await mapController.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
+        ),
+        62,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final driver = driverPosition;
+    WidgetsBinding.instance.addPostFrameCallback((_) => fitMarkers());
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: SizedBox(
+        height: 320,
+        child: Stack(
+          children: [
+            GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: destination,
+                zoom: 15,
+              ),
+              onMapCreated: (value) {
+                controller = value;
+                fitMarkers();
+              },
+              mapToolbarEnabled: false,
+              zoomControlsEnabled: false,
+              markers: {
+                Marker(
+                  markerId: const MarkerId('delivery'),
+                  position: destination,
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueAzure,
+                  ),
+                  infoWindow: InfoWindow(
+                    title: 'Your delivery location',
+                    snippet: widget.order.address,
+                  ),
+                ),
+                if (driver != null)
+                  Marker(
+                    markerId: const MarkerId('driver'),
+                    position: driver,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueOrange,
+                    ),
+                    infoWindow: InfoWindow(
+                      title: 'Your driver',
+                      snippet: widget.tracking?.driverName,
+                    ),
+                  ),
+              },
+              polylines: driver == null
+                  ? const {}
+                  : {
+                      Polyline(
+                        polylineId: const PolylineId('driver-to-delivery'),
+                        points: [driver, destination],
+                        color: AppColors.ember,
+                        width: 4,
+                      ),
+                    },
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 12,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Chip(
+                  avatar: const Icon(Icons.gps_fixed_rounded, size: 17),
+                  label: Text(
+                    driver == null
+                        ? !widget.hasDriver
+                              ? 'Waiting for driver assignment'
+                              : widget.atStore
+                              ? 'Driver is at the Shisha Go store'
+                              : 'Waiting for driver GPS'
+                        : 'Driver location updated live',
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    controller?.dispose();
+    super.dispose();
+  }
 }
 
 class _DeliveryStep extends StatelessWidget {

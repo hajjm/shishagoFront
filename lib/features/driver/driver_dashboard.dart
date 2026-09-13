@@ -36,15 +36,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
     });
   }
 
-  List<AppOrder> get activeOrders => widget.store.orders
-      .where(
-        (order) => {
-          OrderStage.accepted,
-          OrderStage.preparing,
-          OrderStage.onTheWay,
-        }.contains(order.stage),
-      )
-      .toList();
+  List<AppOrder> get activeOrders => widget.store.orders.where((order) {
+    if (order.stage == OrderStage.completed) return order.hasShisha;
+    return {
+      OrderStage.accepted,
+      OrderStage.preparing,
+      OrderStage.onTheWay,
+      OrderStage.finishedUsing,
+    }.contains(order.stage);
+  }).toList();
 
   AppOrder? selectedOrder(List<AppOrder> orders) {
     if (orders.isEmpty) return null;
@@ -91,6 +91,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       OrderStage.accepted => OrderStage.preparing,
       OrderStage.preparing => OrderStage.onTheWay,
       OrderStage.onTheWay => OrderStage.completed,
+      OrderStage.finishedUsing => OrderStage.collected,
       _ => null,
     };
     if (next == null) return;
@@ -128,6 +129,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
   }
 
+  Future<void> openClientLocation(AppOrder order) async {
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': '${order.latitude},${order.longitude}',
+    });
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      showError('Google Maps could not be opened on this device');
+    }
+  }
+
   void showError(Object error) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -142,8 +153,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       builder: (context, _) {
         final assignments = activeOrders;
         final order = selectedOrder(assignments);
-        final completed = widget.store.orders
-            .where((value) => value.stage == OrderStage.completed)
+        final collected = widget.store.orders
+            .where((value) => value.stage == OrderStage.collected)
             .length;
         return Scaffold(
           appBar: AppBar(
@@ -205,6 +216,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         onRetryLocation: () => retryLocation(order),
                         onCall: () => callClient(order.clientPhone),
                         onWhatsApp: () => whatsappClient(order),
+                        onOpenLocation: () => openClientLocation(order),
                       ),
                       const SizedBox(height: 18),
                       _ProgressCard(
@@ -218,8 +230,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       children: [
                         Expanded(
                           child: _DriverMetric(
-                            value: '$completed',
-                            label: 'Completed deliveries',
+                            value: '$collected',
+                            label: 'Collected orders',
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -282,7 +294,7 @@ class _AssignmentPicker extends StatelessWidget {
       ),
       const SizedBox(height: 10),
       SizedBox(
-        height: 100,
+        height: 126,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: orders.length,
@@ -311,18 +323,17 @@ class _AssignmentPicker extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                order.reference,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            OrderStatusPill(stage: order.stage),
-                          ],
+                        Text(
+                          order.reference,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: OrderStatusPill(stage: order.stage),
+                          ),
                         ),
                         const Spacer(),
                         Text(
@@ -351,6 +362,7 @@ class _DeliveryCard extends StatelessWidget {
     required this.onRetryLocation,
     required this.onCall,
     required this.onWhatsApp,
+    required this.onOpenLocation,
   });
 
   final AppOrder order;
@@ -358,6 +370,25 @@ class _DeliveryCard extends StatelessWidget {
   final VoidCallback onRetryLocation;
   final VoidCallback onCall;
   final VoidCallback onWhatsApp;
+  final VoidCallback onOpenLocation;
+
+  String get locationTitle => switch (order.stage) {
+    OrderStage.onTheWay when sharing => 'Live location sharing is on',
+    OrderStage.onTheWay => 'Location sharing needs attention',
+    OrderStage.completed => 'Shisha delivered',
+    OrderStage.finishedUsing => 'Shisha ready for collection',
+    _ => 'Driver is at the Shisha Go store',
+  };
+
+  String get locationSubtitle => switch (order.stage) {
+    OrderStage.onTheWay =>
+      'The client receives a fresh position every 10 seconds.',
+    OrderStage.completed =>
+      'Waiting for the client or the automatic four-hour timer.',
+    OrderStage.finishedUsing =>
+      'Collect the shisha from the client and return it to the store.',
+    _ => 'Location sharing starts automatically after Preparing.',
+  };
 
   @override
   Widget build(BuildContext context) => Container(
@@ -390,13 +421,59 @@ class _DeliveryCard extends StatelessWidget {
           ).textTheme.headlineMedium?.copyWith(color: Colors.white),
         ),
         const SizedBox(height: 5),
-        Text(order.items, style: const TextStyle(color: Colors.white70)),
+        Material(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'DELIVERY DETAILS',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(order.items, style: const TextStyle(color: Colors.white)),
+                if (order.notes.isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  Text(
+                    'Note: ${order.notes}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  'Order total: \$${order.total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 20),
-        const _RoutePoint(
-          icon: Icons.storefront_rounded,
-          label: 'PICK UP',
-          value: 'Shisha Go store',
+        _RoutePoint(
+          icon: order.stage == OrderStage.finishedUsing
+              ? Icons.location_on_rounded
+              : Icons.storefront_rounded,
+          label: order.stage == OrderStage.finishedUsing
+              ? 'COLLECT FROM'
+              : 'PICK UP',
+          value: order.stage == OrderStage.finishedUsing
+              ? order.address
+              : 'Shisha Go store',
           color: AppColors.ember,
+          onTap: order.stage == OrderStage.finishedUsing
+              ? onOpenLocation
+              : null,
         ),
         Container(
           margin: const EdgeInsets.only(left: 17),
@@ -405,10 +482,19 @@ class _DeliveryCard extends StatelessWidget {
           color: Colors.white24,
         ),
         _RoutePoint(
-          icon: Icons.location_on_rounded,
-          label: 'DROP OFF',
-          value: order.address,
+          icon: order.stage == OrderStage.finishedUsing
+              ? Icons.storefront_rounded
+              : Icons.location_on_rounded,
+          label: order.stage == OrderStage.finishedUsing
+              ? 'RETURN TO'
+              : 'DROP OFF',
+          value: order.stage == OrderStage.finishedUsing
+              ? 'Shisha Go store'
+              : order.address,
           color: AppColors.sage,
+          onTap: order.stage == OrderStage.finishedUsing
+              ? null
+              : onOpenLocation,
         ),
         const SizedBox(height: 18),
         Material(
@@ -418,24 +504,20 @@ class _DeliveryCard extends StatelessWidget {
             leading: Icon(
               order.stage == OrderStage.onTheWay
                   ? Icons.gps_fixed_rounded
+                  : order.stage == OrderStage.finishedUsing
+                  ? Icons.inventory_2_rounded
                   : Icons.storefront_rounded,
               color: sharing ? AppColors.sage : Colors.white70,
             ),
             title: Text(
-              order.stage == OrderStage.onTheWay
-                  ? sharing
-                        ? 'Live location sharing is on'
-                        : 'Location sharing needs attention'
-                  : 'Driver is at the Shisha Go store',
+              locationTitle,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
               ),
             ),
             subtitle: Text(
-              order.stage == OrderStage.onTheWay
-                  ? 'The client receives a fresh position every 10 seconds.'
-                  : 'Location sharing starts automatically after Preparing.',
+              locationSubtitle,
               style: const TextStyle(color: Colors.white60),
             ),
             trailing: order.stage == OrderStage.onTheWay && !sharing
@@ -516,6 +598,8 @@ class _ProgressCard extends StatelessWidget {
             OrderStage.preparing,
             OrderStage.onTheWay,
             OrderStage.completed,
+            OrderStage.finishedUsing,
+            OrderStage.collected,
           ])
             _ProgressRow(
               label: step.label,
@@ -532,7 +616,9 @@ class _ProgressCard extends StatelessWidget {
                 order.stage == OrderStage.onTheWay
                     ? 'Mark as delivered'
                     : order.stage == OrderStage.completed
-                    ? 'Delivery completed'
+                    ? 'Waiting for client to finish'
+                    : order.stage == OrderStage.finishedUsing
+                    ? 'Mark as collected'
                     : 'Move to the next stage',
               ),
             ),
@@ -576,47 +662,70 @@ class _RoutePoint extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        child: Icon(icon, size: 19, color: Colors.white),
-      ),
-      const SizedBox(width: 13),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            child: Icon(icon, size: 19, color: Colors.white),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (onTap != null)
+                  const Text(
+                    'Open in Google Maps',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      decoration: TextDecoration.underline,
+                      decorationColor: Colors.white70,
+                    ),
+                  ),
+              ],
             ),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 8),
+            const Icon(Icons.open_in_new_rounded, color: Colors.white70),
           ],
-        ),
+        ],
       ),
-    ],
+    ),
   );
 }
 

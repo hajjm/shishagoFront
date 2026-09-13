@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -178,16 +180,21 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
   DateTime? fromDate;
   DateTime? toDate;
   bool newestFirst = true;
+  final searchController = TextEditingController();
+  Timer? searchDebounce;
 
   String? get statusFilter => switch (filter) {
     'All' => null,
     'Preparing' => 'preparing',
     'On the way' => 'on_the_way',
+    'Delivered' => 'completed',
+    'Finished using' => 'finished_using',
     _ => filter.toLowerCase(),
   };
 
   Future<void> applyFilters() => widget.store.filterOrders(
     status: statusFilter,
+    search: searchController.text,
     from: fromDate,
     to: toDate,
     sortOrder: newestFirst ? 'desc' : 'asc',
@@ -195,6 +202,17 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
   Future<void> setFilter(String value) async {
     setState(() => filter = value);
+    await applyFilters();
+  }
+
+  void searchOrders(String _) {
+    searchDebounce?.cancel();
+    searchDebounce = Timer(const Duration(milliseconds: 350), applyFilters);
+  }
+
+  Future<void> clearSearch() async {
+    searchDebounce?.cancel();
+    searchController.clear();
     await applyFilters();
   }
 
@@ -233,6 +251,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
     try {
       await widget.store.exportOrders(
         status: statusFilter,
+        search: searchController.text,
         from: fromDate,
         to: toDate,
         sortOrder: newestFirst ? 'desc' : 'asc',
@@ -249,6 +268,13 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     }
+  }
+
+  @override
+  void dispose() {
+    searchDebounce?.cancel();
+    searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -321,6 +347,30 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: TextField(
+                controller: searchController,
+                onChanged: searchOrders,
+                onSubmitted: (_) => applyFilters(),
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search by order ID',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: searchController,
+                    builder: (context, value, _) => value.text.isEmpty
+                        ? const SizedBox.shrink()
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: clearSearch,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -331,7 +381,9 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                           'Accepted',
                           'Preparing',
                           'On the way',
-                          'Completed',
+                          'Delivered',
+                          'Finished using',
+                          'Collected',
                           'Cancelled',
                         ]
                         .map(
@@ -548,6 +600,13 @@ class _OwnerOrderCard extends StatelessWidget {
                   icon: const Icon(Icons.person_add_alt_1_rounded),
                   label: const Text('Assign driver'),
                 )
+              else if (order.stage == OrderStage.finishedUsing)
+                FilledButton.icon(
+                  onPressed: () =>
+                      store.changeOrderStatus(order, OrderStage.collected),
+                  icon: const Icon(Icons.inventory_2_rounded),
+                  label: const Text('Mark collected'),
+                )
               else if (order.driverName != null)
                 Text(
                   order.driverName!,
@@ -725,7 +784,33 @@ class _OwnerCatalogPageState extends State<OwnerCatalogPage> {
                       '\$${product.price.toStringAsFixed(2)}',
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
+                    const SizedBox(width: 10),
+                    Tooltip(
+                      message: product.available
+                          ? 'Available to clients'
+                          : 'Hidden from clients',
+                      child: Switch.adaptive(
+                        value: product.available,
+                        onChanged: widget.store.loading
+                            ? null
+                            : (value) async {
+                                try {
+                                  await widget.store.setProductAvailability(
+                                    product,
+                                    value,
+                                  );
+                                } catch (error) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(error.toString())),
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    ),
                     IconButton(
+                      tooltip: 'Edit item',
                       onPressed: () => showProductEditor(
                         context,
                         widget.store,
@@ -854,7 +939,6 @@ Future<void> showProductEditor(
       marketCategoryId = activeCategories.first.id;
     }
   }
-  var available = product?.available ?? true;
   String? priceError;
   String? categoryError;
   String? customizationError;
@@ -947,11 +1031,6 @@ Future<void> showProductEditor(
                     ),
                   ),
               ],
-              SwitchListTile(
-                value: available,
-                onChanged: (value) => setState(() => available = value),
-                title: const Text('Available'),
-              ),
               const Divider(height: 28),
               Row(
                 children: [
@@ -1133,6 +1212,53 @@ Future<void> showProductEditor(
           ),
         ),
         actions: [
+          if (product != null)
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (confirmationContext) => AlertDialog(
+                    title: const Text('Delete this item?'),
+                    content: Text(
+                      '${product.name} will be removed from the catalog. Existing order history will be preserved.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pop(confirmationContext, false),
+                        child: const Text('Keep item'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            confirmationContext,
+                          ).colorScheme.error,
+                        ),
+                        onPressed: () =>
+                            Navigator.pop(confirmationContext, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !context.mounted) return;
+                try {
+                  await store.deleteProduct(product);
+                  if (context.mounted) Navigator.pop(context);
+                } catch (error) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.toString())));
+                  }
+                }
+              },
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Delete'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
@@ -1168,7 +1294,7 @@ Future<void> showProductEditor(
                 category: category,
                 marketCategoryId: marketCategoryId,
                 price: parsedPrice,
-                available: available,
+                available: product?.available ?? true,
                 customizationOptions: customizationOptions
                     .map(
                       (option) => {

@@ -46,6 +46,23 @@ AppOrder assignedOrder({
 );
 
 void main() {
+  testWidgets('owner orders includes order ID search', (tester) async {
+    final store = createStore();
+    addTearDown(store.dispose);
+    addTearDown(store.api.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OwnerOrdersPage(store: store)),
+      ),
+    );
+
+    expect(
+      find.widgetWithText(TextField, 'Search by order ID'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('catalog price accepts digits and two decimal places only', (
     tester,
   ) async {
@@ -78,6 +95,36 @@ void main() {
     expect(find.text('Option name'), findsOneWidget);
     expect(find.text('Add choice'), findsOneWidget);
     expect(find.text('Allow multiple choices'), findsOneWidget);
+  });
+
+  testWidgets('catalog availability is on the row and edit offers delete', (
+    tester,
+  ) async {
+    final store = createStore();
+    addTearDown(store.dispose);
+    addTearDown(store.api.close);
+    store.products = const [
+      Product(
+        id: 'shisha-1',
+        name: 'Fresh Mint',
+        description: 'Mint flavor',
+        category: ProductCategory.chicha,
+        price: 18,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OwnerCatalogPage(store: store)),
+      ),
+    );
+
+    expect(find.byType(Switch), findsOneWidget);
+    await tester.tap(find.byTooltip('Edit item'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit item'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Available'), findsNothing);
   });
 
   testWidgets('catalog separates Shisha and categorized Market items', (
@@ -212,6 +259,10 @@ void main() {
   testWidgets('driver can select and manage multiple active deliveries', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final store = createStore();
     store.session.user = const AppUser(
       id: 'driver-1',
@@ -223,6 +274,13 @@ void main() {
       phoneVerified: true,
     );
     store.orders = [
+      assignedOrder(
+        id: '3',
+        reference: 'SH-003',
+        clientName: 'Collection Client',
+        clientPhone: '+96170000003',
+        stage: OrderStage.finishedUsing,
+      ),
       assignedOrder(
         id: '1',
         reference: 'SH-001',
@@ -247,15 +305,15 @@ void main() {
       ),
     );
 
-    expect(find.text('2 active deliveries assigned'), findsOneWidget);
+    expect(find.text('3 active deliveries assigned'), findsOneWidget);
     expect(find.text('Call'), findsOneWidget);
     expect(find.text('WhatsApp'), findsOneWidget);
     expect(find.byType(SwitchListTile), findsNothing);
-    expect(find.text('Driver is at the Shisha Go store'), findsOneWidget);
-    await tester.tap(find.text('SH-002').first);
-    await tester.pumpAndSettle();
-    expect(find.text('+96170000002'), findsOneWidget);
-    expect(find.text('Preparing'), findsWidgets);
+    expect(find.text('Shisha ready for collection'), findsOneWidget);
+    expect(find.text('+96170000003'), findsOneWidget);
+    expect(find.text('DELIVERY DETAILS'), findsOneWidget);
+    expect(find.text('Open in Google Maps'), findsOneWidget);
+    expect(find.text('Mark as collected'), findsOneWidget);
     expect(driverLocationUpdateInterval, const Duration(seconds: 10));
   });
 }

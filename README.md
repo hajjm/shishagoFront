@@ -18,8 +18,9 @@ and selects the client, owner, or driver experience from the authenticated serve
 
 - Sign-in-first WhatsApp OTP authentication with a separate client sign-up page
 - Client delivery addresses with a required, visibly confirmed GPS point
-- Chicha and market catalogs, cart, checkout, order history, and reorder
-- Live order status, driver coordinates, and driver phone details
+- Multiple saved client locations and a review-and-confirm checkout
+- Chicha and market catalogs, cart, order history, and reorder
+- Google Maps tracking with delivery and live driver markers
 - Owner dashboard with order filtering, Excel export with daily/monthly summaries, catalog, client, and driver management
 - Driver assignments, customer calling, live GPS sharing, and delivery status progression
 - Persisted notifications with live WebSocket refresh
@@ -62,6 +63,24 @@ flutter run -d chrome -t lib/main_dev.dart --dart-define=SHISHAGO_API_URL=http:/
 ```
 
 Web location access requires HTTPS or localhost.
+
+## Google Maps setup
+
+Create restricted Google Maps Platform keys and enable **Maps SDK for Android**,
+**Maps SDK for iOS**, and **Maps JavaScript API** in Google Cloud.
+
+- Android: add `GOOGLE_MAPS_API_KEY=your_android_key` to
+  `android/local.properties`.
+- iOS: copy `ios/Flutter/GoogleMaps.xcconfig.example` to
+  `ios/Flutter/GoogleMaps.xcconfig`, then replace the placeholder. This file is
+  ignored by Git.
+- Web: replace `YOUR_GOOGLE_MAPS_API_KEY` in `web/index.html` with a
+  website-restricted key before building. Restrict it to the deployed domain
+  and localhost development origins.
+
+The checkout map marker is the selected delivery location saved with the order.
+The second marker is the assigned driver's latest GPS position and is updated by
+WebSocket, with the existing 10-second HTTP fallback.
 
 ## Build targets
 

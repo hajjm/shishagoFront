@@ -3,6 +3,7 @@ import 'package:shishago/data/app_store.dart';
 import 'package:shishago/models/app_models.dart';
 import 'package:shishago/services/session_controller.dart';
 import 'package:shishago/services/shishago_api.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class _UnavailableSocketApi extends ShishaGoApi {
@@ -42,8 +43,21 @@ class _UnavailableSocketApi extends ShishaGoApi {
   }) async => [];
 
   @override
+  Future<List<Map<String, dynamic>>> getSavedLocations() async => [
+    {
+      'id': 'location-1',
+      'label': 'Home',
+      'address': 'Beirut',
+      'latitude': 33.89,
+      'longitude': 35.50,
+      'is_default': true,
+    },
+  ];
+
+  @override
   Future<List<Map<String, dynamic>>> getOrders({
     String? status,
+    String? search,
     DateTime? dateFrom,
     DateTime? dateTo,
     String sortBy = 'created_at',
@@ -95,7 +109,41 @@ class _UnavailableSocketApi extends ShishaGoApi {
       throw StateError('WebSocket unavailable');
 }
 
+class _DisabledAccountApi extends ShishaGoApi {
+  _DisabledAccountApi() : super(baseUrl: 'http://test.invalid');
+
+  @override
+  Future<List<Map<String, dynamic>>> getItems({
+    String? category,
+    bool availableOnly = true,
+  }) => throw const ShishaGoApiException('Account is unavailable', 401);
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('a rejected disabled session is signed out automatically', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _DisabledAccountApi()..accessToken = 'disabled-token';
+    final session = SessionController(api)
+      ..user = const AppUser(
+        id: 'client-disabled',
+        name: 'Disabled Client',
+        phone: '+96170000009',
+        role: UserRole.client,
+        address: 'Beirut',
+        isActive: true,
+        phoneVerified: true,
+      );
+    final store = ShishaGoStore(api: api, session: session);
+    addTearDown(store.dispose);
+    addTearDown(api.close);
+
+    await expectLater(store.initialize(), throwsA(isA<ShishaGoApiException>()));
+    expect(session.user, isNull);
+    expect(api.accessToken, isNull);
+  });
+
   test(
     'polls tracking and notifications while WebSockets are unavailable',
     () async {

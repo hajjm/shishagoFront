@@ -31,6 +31,35 @@ class _CartEntry {
   int quantity;
 }
 
+class CheckoutLine {
+  const CheckoutLine({
+    required this.product,
+    required this.quantity,
+    required this.unitPrice,
+    required this.selections,
+  });
+
+  final Product product;
+  final int quantity;
+  final double unitPrice;
+  final Map<String, List<String>> selections;
+
+  double get total => unitPrice * quantity;
+
+  String get customizationSummary {
+    final names = <String>[];
+    for (final option in product.customizationOptions) {
+      final selected = selections[option.id] ?? const <String>[];
+      names.addAll(
+        option.choices
+            .where((choice) => selected.contains(choice.id))
+            .map((choice) => '${option.name}: ${choice.name}'),
+      );
+    }
+    return names.join(' · ');
+  }
+}
+
 class ShishaGoStore extends ChangeNotifier {
   ShishaGoStore({
     required this.api,
@@ -56,6 +85,7 @@ class ShishaGoStore extends ChangeNotifier {
   List<MarketCategory> marketCategories = [];
   List<AppOrder> orders = [];
   List<AppUser> users = [];
+  List<SavedLocation> savedLocations = [];
   List<AppNotification> notifications = [];
   Map<String, dynamic> dashboard = {};
   TrackingInfo? tracking;
@@ -97,6 +127,17 @@ class ShishaGoStore extends ChangeNotifier {
     (sum, entry) => sum + entry.unitPrice * entry.quantity,
   );
 
+  List<CheckoutLine> get cartLines => _cart.values
+      .map(
+        (entry) => CheckoutLine(
+          product: entry.product,
+          quantity: entry.quantity,
+          unitPrice: entry.unitPrice,
+          selections: entry.selections,
+        ),
+      )
+      .toList(growable: false);
+
   int quantityFor(String productId) => _cart.values
       .where((entry) => entry.product.id == productId)
       .fold(0, (sum, entry) => sum + entry.quantity);
@@ -118,6 +159,11 @@ class ShishaGoStore extends ChangeNotifier {
     notifications = (await api.getNotifications())
         .map(AppNotification.fromJson)
         .toList();
+    if (role == UserRole.client) {
+      savedLocations = (await api.getSavedLocations())
+          .map(SavedLocation.fromJson)
+          .toList();
+    }
     if (role == UserRole.owner) {
       users = (await api.getUsers()).map(AppUser.fromJson).toList();
       dashboard = await api.getDashboardSummary();
@@ -126,6 +172,7 @@ class ShishaGoStore extends ChangeNotifier {
 
   Future<void> filterOrders({
     String? status,
+    String? search,
     DateTime? from,
     DateTime? to,
     String sortBy = 'created_at',
@@ -133,6 +180,7 @@ class ShishaGoStore extends ChangeNotifier {
   }) => _run(() async {
     orders = (await api.getOrders(
       status: status,
+      search: search,
       dateFrom: from,
       dateTo: to,
       sortBy: sortBy,
@@ -193,13 +241,12 @@ class ShishaGoStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<AppOrder> checkout({String notes = ''}) async {
-    final user = session.user;
-    if (user == null || user.latitude == null || user.longitude == null) {
-      throw const ShishaGoApiException(
-        'Add a delivery location to your profile first',
-        400,
-      );
+  Future<AppOrder> checkout({
+    required SavedLocation location,
+    String notes = '',
+  }) async {
+    if (_cart.isEmpty) {
+      throw const ShishaGoApiException('Your cart is empty', 400);
     }
     final response = await api.createOrder(
       items: _cart.values
@@ -218,9 +265,10 @@ class ShishaGoStore extends ChangeNotifier {
             },
           )
           .toList(),
-      address: user.address,
-      latitude: user.latitude!,
-      longitude: user.longitude!,
+      address: location.address,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      deliveryLocationId: location.id,
       notes: notes,
     );
     final order = AppOrder.fromJson(response);
@@ -228,6 +276,43 @@ class ShishaGoStore extends ChangeNotifier {
     orders.insert(0, order);
     notifyListeners();
     return order;
+  }
+
+  Future<SavedLocation> addSavedLocation({
+    required String label,
+    required String address,
+    required double latitude,
+    required double longitude,
+    bool isDefault = false,
+  }) async {
+    final location = SavedLocation.fromJson(
+      await api.createSavedLocation(
+        label: label,
+        address: address,
+        latitude: latitude,
+        longitude: longitude,
+        isDefault: isDefault,
+      ),
+    );
+    await refreshSavedLocations();
+    return location;
+  }
+
+  Future<void> setDefaultLocation(SavedLocation location) async {
+    await api.updateSavedLocation(location.id, {'is_default': true});
+    await refreshSavedLocations();
+  }
+
+  Future<void> deleteSavedLocation(SavedLocation location) async {
+    await api.deleteSavedLocation(location.id);
+    await refreshSavedLocations();
+  }
+
+  Future<void> refreshSavedLocations() async {
+    savedLocations = (await api.getSavedLocations())
+        .map(SavedLocation.fromJson)
+        .toList();
+    notifyListeners();
   }
 
   Future<void> reorder(AppOrder order) => _run(() async {
@@ -282,6 +367,20 @@ class ShishaGoStore extends ChangeNotifier {
     }
   });
 
+  Future<void> setProductAvailability(Product product, bool available) =>
+      _run(() async {
+        final updated = Product.fromJson(
+          await api.updateItem(product.id, {'is_available': available}),
+        );
+        final index = products.indexWhere((item) => item.id == product.id);
+        if (index != -1) products[index] = updated;
+      });
+
+  Future<void> deleteProduct(Product product) => _run(() async {
+    await api.deleteItem(product.id);
+    products.removeWhere((item) => item.id == product.id);
+  });
+
   Future<MarketCategory> createMarketCategory(String name) async {
     late MarketCategory category;
     await _run(() async {
@@ -319,6 +418,7 @@ class ShishaGoStore extends ChangeNotifier {
 
   Future<void> exportOrders({
     String? status,
+    String? search,
     DateTime? from,
     DateTime? to,
     String sortBy = 'created_at',
@@ -326,6 +426,7 @@ class ShishaGoStore extends ChangeNotifier {
   }) async {
     final bytes = await api.exportOrders(
       status: status,
+      search: search,
       dateFrom: from,
       dateTo: to,
       sortBy: sortBy,
@@ -680,6 +781,10 @@ class ShishaGoStore extends ChangeNotifier {
         final notification = AppNotification.fromJson(
           Map<String, dynamic>.from(payload),
         );
+        if (notification.kind == 'account_disabled') {
+          unawaited(session.logout());
+          return;
+        }
         notifications.removeWhere((value) => value.id == notification.id);
         notifications.insert(0, notification);
         _notifyIfActive();
@@ -721,7 +826,11 @@ class ShishaGoStore extends ChangeNotifier {
           .map(AppNotification.fromJson)
           .toList();
       _notifyIfActive();
-    } catch (_) {
+    } catch (error) {
+      if (error is ShishaGoApiException && error.statusCode == 401) {
+        unawaited(session.logout());
+        return;
+      }
       // The next timer tick or a recovered WebSocket retries synchronization.
     } finally {
       _notificationPollInProgress = false;
@@ -752,7 +861,10 @@ class ShishaGoStore extends ChangeNotifier {
   }
 
   bool _isTerminal(OrderStage stage) =>
-      stage == OrderStage.completed || stage == OrderStage.cancelled;
+      stage == OrderStage.completed ||
+      stage == OrderStage.finishedUsing ||
+      stage == OrderStage.collected ||
+      stage == OrderStage.cancelled;
 
   void _notifyIfActive() {
     if (!_disposed) notifyListeners();
@@ -791,6 +903,9 @@ class ShishaGoStore extends ChangeNotifier {
     try {
       await operation();
     } catch (exception) {
+      if (exception is ShishaGoApiException && exception.statusCode == 401) {
+        await session.logout();
+      }
       error = exception.toString();
       rethrow;
     } finally {

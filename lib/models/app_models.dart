@@ -94,7 +94,16 @@ class ProductCustomizationOption {
   final List<ProductCustomizationChoice> choices;
 }
 
-enum OrderStage { pending, accepted, preparing, onTheWay, completed, cancelled }
+enum OrderStage {
+  pending,
+  accepted,
+  preparing,
+  onTheWay,
+  completed,
+  finishedUsing,
+  collected,
+  cancelled,
+}
 
 extension OrderStageLabel on OrderStage {
   String get label => switch (this) {
@@ -102,13 +111,16 @@ extension OrderStageLabel on OrderStage {
     OrderStage.accepted => 'Accepted',
     OrderStage.preparing => 'Preparing',
     OrderStage.onTheWay => 'On the way',
-    OrderStage.completed => 'Completed',
+    OrderStage.completed => 'Delivered',
+    OrderStage.finishedUsing => 'Finished using',
+    OrderStage.collected => 'Collected',
     OrderStage.cancelled => 'Cancelled',
   };
 
   String get apiValue => switch (this) {
     OrderStage.preparing => 'preparing',
     OrderStage.onTheWay => 'on_the_way',
+    OrderStage.finishedUsing => 'finished_using',
     _ => name,
   };
 
@@ -116,6 +128,8 @@ extension OrderStageLabel on OrderStage {
     'preparing' || 'picked_up' => OrderStage.preparing,
     'on_the_way' => OrderStage.onTheWay,
     'completed' => OrderStage.completed,
+    'finished_using' => OrderStage.finishedUsing,
+    'collected' => OrderStage.collected,
     'cancelled' => OrderStage.cancelled,
     'accepted' => OrderStage.accepted,
     _ => OrderStage.pending,
@@ -156,6 +170,33 @@ class AppUser {
   final double? longitude;
   final bool isActive;
   final bool phoneVerified;
+}
+
+class SavedLocation {
+  const SavedLocation({
+    required this.id,
+    required this.label,
+    required this.address,
+    required this.latitude,
+    required this.longitude,
+    required this.isDefault,
+  });
+
+  factory SavedLocation.fromJson(Map<String, dynamic> json) => SavedLocation(
+    id: json['id'] as String,
+    label: json['label'] as String,
+    address: json['address'] as String,
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    isDefault: json['is_default'] as bool? ?? false,
+  );
+
+  final String id;
+  final String label;
+  final String address;
+  final double latitude;
+  final double longitude;
+  final bool isDefault;
 }
 
 class Product {
@@ -286,6 +327,8 @@ class AppOrder {
     this.driverId,
     this.driverName,
     this.driverPhone,
+    this.deliveryLocationId,
+    this.notes = '',
   });
 
   factory AppOrder.fromJson(Map<String, dynamic> json) => AppOrder(
@@ -297,6 +340,8 @@ class AppOrder {
     driverId: json['driver_id'] as String?,
     driverName: json['driver_name'] as String?,
     driverPhone: json['driver_phone'] as String?,
+    deliveryLocationId: json['delivery_location_id'] as String?,
+    notes: json['notes'] as String? ?? '',
     lines: (json['items'] as List<dynamic>)
         .map((item) => OrderLine.fromJson(item as Map<String, dynamic>))
         .toList(),
@@ -316,6 +361,8 @@ class AppOrder {
   final String? driverId;
   final String? driverName;
   final String? driverPhone;
+  final String? deliveryLocationId;
+  final String notes;
   final List<OrderLine> lines;
   final double total;
   final OrderStage stage;
@@ -323,6 +370,9 @@ class AppOrder {
   final String address;
   final double latitude;
   final double longitude;
+
+  bool get hasShisha =>
+      lines.any((line) => line.category == ProductCategory.chicha);
 
   String get items => lines
       .map((line) {
@@ -379,6 +429,8 @@ class AppNotification {
     required this.body,
     required this.isRead,
     required this.createdAt,
+    this.kind = 'order_update',
+    this.data = const {},
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> json) =>
@@ -388,6 +440,10 @@ class AppNotification {
         body: json['body'] as String,
         isRead: json['is_read'] as bool,
         createdAt: DateTime.parse(json['created_at'] as String),
+        kind: json['kind'] as String? ?? 'order_update',
+        data: Map<String, dynamic>.from(
+          json['data'] as Map? ?? const <String, dynamic>{},
+        ),
       );
 
   final String id;
@@ -395,4 +451,6 @@ class AppNotification {
   final String body;
   final bool isRead;
   final DateTime createdAt;
+  final String kind;
+  final Map<String, dynamic> data;
 }
