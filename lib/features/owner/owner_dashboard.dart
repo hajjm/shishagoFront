@@ -305,6 +305,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
     animation: widget.store,
     builder: (context, _) {
       final summary = widget.store.dashboard;
+      final compactLayout = MediaQuery.sizeOf(context).width < 600;
       return RefreshIndicator(
         onRefresh: widget.store.refresh,
         child: ListView(
@@ -339,31 +340,68 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
               ],
             ),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _MetricCard(
-                  label: 'Orders today',
-                  value: '${summary['order_count'] ?? 0}',
-                  icon: Icons.receipt_long_rounded,
-                  color: AppColors.ember,
+            if (compactLayout)
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  key: const ValueKey('owner-today-summary'),
+                  leading: const Icon(Icons.insights_rounded),
+                  title: const Text(
+                    "Today's summary",
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: const Text(
+                    'Orders, revenue and active deliveries',
+                  ),
+                  children: [
+                    _CompactMetricRow(
+                      label: 'Orders today',
+                      value: '${summary['order_count'] ?? 0}',
+                      icon: Icons.receipt_long_rounded,
+                      color: AppColors.ember,
+                    ),
+                    _CompactMetricRow(
+                      label: 'Revenue',
+                      value:
+                          '\$${(summary['revenue'] as num? ?? 0).toStringAsFixed(2)}',
+                      icon: Icons.payments_outlined,
+                      color: AppColors.sage,
+                    ),
+                    _CompactMetricRow(
+                      label: 'Active deliveries',
+                      value: '${summary['active_delivery_count'] ?? 0}',
+                      icon: Icons.delivery_dining_rounded,
+                      color: Colors.blue,
+                    ),
+                  ],
                 ),
-                _MetricCard(
-                  label: 'Revenue',
-                  value:
-                      '\$${(summary['revenue'] as num? ?? 0).toStringAsFixed(2)}',
-                  icon: Icons.payments_outlined,
-                  color: AppColors.sage,
-                ),
-                _MetricCard(
-                  label: 'Active deliveries',
-                  value: '${summary['active_delivery_count'] ?? 0}',
-                  icon: Icons.delivery_dining_rounded,
-                  color: Colors.blue,
-                ),
-              ],
-            ),
+              )
+            else
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _MetricCard(
+                    label: 'Orders today',
+                    value: '${summary['order_count'] ?? 0}',
+                    icon: Icons.receipt_long_rounded,
+                    color: AppColors.ember,
+                  ),
+                  _MetricCard(
+                    label: 'Revenue',
+                    value:
+                        '\$${(summary['revenue'] as num? ?? 0).toStringAsFixed(2)}',
+                    icon: Icons.payments_outlined,
+                    color: AppColors.sage,
+                  ),
+                  _MetricCard(
+                    label: 'Active deliveries',
+                    value: '${summary['active_delivery_count'] ?? 0}',
+                    icon: Icons.delivery_dining_rounded,
+                    color: Colors.blue,
+                  ),
+                ],
+              ),
             const SizedBox(height: 26),
             Text(
               'All orders',
@@ -485,6 +523,36 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         ),
       );
     },
+  );
+}
+
+class _CompactMetricRow extends StatelessWidget {
+  const _CompactMetricRow({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: CircleAvatar(
+      backgroundColor: color.withValues(alpha: 0.12),
+      foregroundColor: color,
+      child: Icon(icon),
+    ),
+    title: Text(label),
+    trailing: Text(
+      value,
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+    ),
   );
 }
 

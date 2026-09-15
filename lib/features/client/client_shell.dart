@@ -151,9 +151,11 @@ class _ShopPageState extends State<ShopPage> {
           builder: (context, constraints) {
             final columns = constraints.maxWidth >= 1050
                 ? 4
-                : constraints.maxWidth >= 680
+                : constraints.maxWidth >= 780
                 ? 3
-                : 2;
+                : constraints.maxWidth >= 600
+                ? 2
+                : 1;
             return CustomScrollView(
               slivers: [
                 SliverPadding(

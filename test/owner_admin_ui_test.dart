@@ -50,6 +50,38 @@ AppOrder assignedOrder({
 );
 
 void main() {
+  testWidgets('owner metrics use a collapsed summary on phones', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = createStore()
+      ..dashboard = {
+        'order_count': 3,
+        'revenue': 42.5,
+        'active_delivery_count': 2,
+      };
+    addTearDown(store.dispose);
+    addTearDown(store.api.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OwnerOrdersPage(store: store)),
+      ),
+    );
+
+    expect(find.text("Today's summary"), findsOneWidget);
+    expect(find.text('Orders today'), findsNothing);
+    await tester.tap(find.text("Today's summary"));
+    await tester.pumpAndSettle();
+    expect(find.text('Orders today'), findsOneWidget);
+    expect(find.text('\$42.50'), findsOneWidget);
+    expect(find.text('Active deliveries'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('owner orders includes order ID search', (tester) async {
     final store = createStore();
     addTearDown(store.dispose);

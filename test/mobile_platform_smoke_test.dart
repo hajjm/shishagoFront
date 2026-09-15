@@ -48,6 +48,45 @@ void configurePhone(WidgetTester tester) {
 void main() {
   tearDown(() {});
 
+  testWidgets('phone catalog quantity controls do not overflow after adding', (
+    tester,
+  ) async {
+    configurePhone(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ShishaGoApi(baseUrl: 'http://127.0.0.1:8001');
+    final session = SessionController(api)..user = client;
+    final store = ShishaGoStore(api: api, session: session)
+      ..products = const [
+        Product(
+          id: 'phone-shisha',
+          name: 'Mint Shisha',
+          description: 'A fresh mint setup delivered to your door',
+          category: ProductCategory.chicha,
+          price: 5,
+        ),
+      ];
+    addTearDown(store.dispose);
+    addTearDown(api.close);
+
+    await tester.pumpWidget(
+      MaterialApp(home: ShopPage(store: store, user: client)),
+    );
+
+    final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+    expect(
+      (grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+          .crossAxisCount,
+      1,
+    );
+    await tester.tap(find.byTooltip('Add to order'));
+    await tester.pump();
+
+    expect(find.text('1'), findsOneWidget);
+    expect(find.byTooltip('Add another'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final role in UserRole.values) {
     testWidgets('$role dashboard renders at iPhone/Android phone width', (
       tester,

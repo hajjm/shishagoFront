@@ -515,8 +515,14 @@ class ShishaGoStore extends ChangeNotifier {
     if (bytes.isEmpty) {
       throw StateError('The backend returned an empty export file.');
     }
+    final today = DateTime.now();
+    final dateStamp = [
+      today.year.toString().padLeft(4, '0'),
+      today.month.toString().padLeft(2, '0'),
+      today.day.toString().padLeft(2, '0'),
+    ].join('-');
     return FileSaver.instance.saveAs(
-      name: 'shishago-orders',
+      name: 'shishago-orders-$dateStamp',
       bytes: bytes,
       fileExtension: 'xlsx',
       mimeType: MimeType.microsoftExcel,
