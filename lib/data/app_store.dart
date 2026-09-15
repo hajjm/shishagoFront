@@ -421,7 +421,7 @@ class ShishaGoStore extends ChangeNotifier {
     users.removeWhere((user) => user.id == driver.id);
   });
 
-  Future<void> exportOrders({
+  Future<String?> exportOrders({
     String? status,
     String? search,
     DateTime? from,
@@ -437,7 +437,10 @@ class ShishaGoStore extends ChangeNotifier {
       sortBy: sortBy,
       sortOrder: sortOrder,
     );
-    await FileSaver.instance.saveFile(
+    if (bytes.isEmpty) {
+      throw StateError('The backend returned an empty export file.');
+    }
+    return FileSaver.instance.saveAs(
       name: 'shishago-orders',
       bytes: bytes,
       fileExtension: 'xlsx',

@@ -249,7 +249,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
   Future<void> export() async {
     try {
-      await widget.store.exportOrders(
+      final savedPath = await widget.store.exportOrders(
         status: statusFilter,
         search: searchController.text,
         from: fromDate,
@@ -257,9 +257,16 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         sortOrder: newestFirst ? 'desc' : 'asc',
       );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Order export saved')));
+        final saved = savedPath != null && savedPath.trim().isNotEmpty;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              saved
+                  ? 'Order export saved to the selected folder'
+                  : 'Order export cancelled',
+            ),
+          ),
+        );
       }
     } catch (error) {
       if (mounted) {
