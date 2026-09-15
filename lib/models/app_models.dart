@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 enum UserRole { client, owner, driver }
@@ -39,6 +41,64 @@ class MarketCategory {
   final String name;
   final String slug;
   final bool isActive;
+}
+
+class DeliveryZone {
+  const DeliveryZone({
+    required this.id,
+    required this.name,
+    required this.centerLatitude,
+    required this.centerLongitude,
+    required this.radiusKm,
+    required this.isActive,
+  });
+
+  factory DeliveryZone.fromJson(Map<String, dynamic> json) => DeliveryZone(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    centerLatitude: (json['center_latitude'] as num).toDouble(),
+    centerLongitude: (json['center_longitude'] as num).toDouble(),
+    radiusKm: (json['radius_km'] as num).toDouble(),
+    isActive: json['is_active'] as bool? ?? true,
+  );
+
+  final String id;
+  final String name;
+  final double centerLatitude;
+  final double centerLongitude;
+  final double radiusKm;
+  final bool isActive;
+
+  bool contains(double latitude, double longitude) {
+    const earthRadiusKm = 6371.0088;
+    final latitudeDelta = _radians(centerLatitude - latitude);
+    final longitudeDelta = _radians(centerLongitude - longitude);
+    final haversine =
+        math.pow(math.sin(latitudeDelta / 2), 2) +
+        math.cos(_radians(latitude)) *
+            math.cos(_radians(centerLatitude)) *
+            math.pow(math.sin(longitudeDelta / 2), 2);
+    final distance =
+        earthRadiusKm * 2 * math.asin(math.min(1, math.sqrt(haversine)));
+    return distance <= radiusKm;
+  }
+
+  static double _radians(double degrees) => degrees * math.pi / 180;
+}
+
+class DeliveryAvailability {
+  const DeliveryAvailability({required this.available, this.zone});
+
+  factory DeliveryAvailability.fromJson(Map<String, dynamic> json) =>
+      DeliveryAvailability(
+        available: json['available'] as bool,
+        zone: json['zone'] == null
+            ? null
+            : DeliveryZone.fromJson(json['zone'] as Map<String, dynamic>),
+      );
+
+  final bool available;
+  final DeliveryZone? zone;
 }
 
 class ProductCustomizationChoice {
@@ -329,6 +389,8 @@ class AppOrder {
     this.driverPhone,
     this.deliveryLocationId,
     this.notes = '',
+    this.rating,
+    this.ratingComment,
   });
 
   factory AppOrder.fromJson(Map<String, dynamic> json) => AppOrder(
@@ -342,6 +404,8 @@ class AppOrder {
     driverPhone: json['driver_phone'] as String?,
     deliveryLocationId: json['delivery_location_id'] as String?,
     notes: json['notes'] as String? ?? '',
+    rating: json['rating'] as int?,
+    ratingComment: json['rating_comment'] as String?,
     lines: (json['items'] as List<dynamic>)
         .map((item) => OrderLine.fromJson(item as Map<String, dynamic>))
         .toList(),
@@ -363,6 +427,8 @@ class AppOrder {
   final String? driverPhone;
   final String? deliveryLocationId;
   final String notes;
+  final int? rating;
+  final String? ratingComment;
   final List<OrderLine> lines;
   final double total;
   final OrderStage stage;

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/app_theme.dart';
 import '../../data/app_store.dart';
@@ -30,6 +31,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       OwnerOrdersPage(store: widget.store),
       OwnerCatalogPage(store: widget.store),
       OwnerPeoplePage(store: widget.store),
+      OwnerDeliveryZonesPage(store: widget.store),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -39,7 +41,12 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
             automaticallyImplyLeading: false,
             title: wide
                 ? Text(
-                    ['Orders', 'Catalog', 'People'][selectedIndex],
+                    [
+                      'Orders',
+                      'Catalog',
+                      'People',
+                      'Delivery areas',
+                    ][selectedIndex],
                     style: Theme.of(context).textTheme.headlineMedium,
                   )
                 : const BrandLogo(size: 40),
@@ -132,6 +139,11 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                         selectedIcon: Icon(Icons.people_rounded),
                         label: Text('People'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.map_outlined),
+                        selectedIcon: Icon(Icons.map_rounded),
+                        label: Text('Delivery areas'),
+                      ),
                     ],
                   ),
                 ),
@@ -158,6 +170,10 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                     NavigationDestination(
                       icon: Icon(Icons.people_outline_rounded),
                       label: 'People',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.map_outlined),
+                      label: 'Areas',
                     ),
                   ],
                 ),
@@ -580,6 +596,30 @@ class _OwnerOrderCard extends StatelessWidget {
                   '${order.items}\n${order.address}',
                   style: const TextStyle(color: AppColors.muted),
                 ),
+                if (order.rating case final rating?) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ...List.generate(
+                        5,
+                        (index) => Icon(
+                          index < rating
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 20,
+                          color: Colors.amber.shade700,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('$rating/5'),
+                    ],
+                  ),
+                  if (order.ratingComment case final comment?)
+                    Text(
+                      comment,
+                      style: const TextStyle(color: AppColors.muted),
+                    ),
+                ],
               ],
             ),
           ),
@@ -1572,6 +1612,352 @@ class _AddDriverDialogState extends State<_AddDriverDialog> {
         child: const Text('Cancel'),
       ),
       FilledButton(onPressed: submit, child: const Text('Create')),
+    ],
+  );
+}
+
+class OwnerDeliveryZonesPage extends StatefulWidget {
+  const OwnerDeliveryZonesPage({super.key, required this.store});
+
+  final ShishaGoStore store;
+
+  @override
+  State<OwnerDeliveryZonesPage> createState() => _OwnerDeliveryZonesPageState();
+}
+
+class _OwnerDeliveryZonesPageState extends State<OwnerDeliveryZonesPage> {
+  Future<void> editZone([DeliveryZone? existing]) async {
+    final result =
+        await showDialog<
+          ({String name, double latitude, double longitude, double radiusKm})
+        >(
+          context: context,
+          builder: (_) => _DeliveryZoneDialog(existing: existing),
+        );
+    if (result == null || !mounted) return;
+    try {
+      await widget.store.saveDeliveryZone(
+        existing: existing,
+        name: result.name,
+        centerLatitude: result.latitude,
+        centerLongitude: result.longitude,
+        radiusKm: result.radiusKm,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> deleteZone(DeliveryZone zone) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${zone.name}?'),
+        content: const Text(
+          'Clients will no longer be able to order to this delivery area.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.store.deleteDeliveryZone(zone);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.store,
+    builder: (context, _) => ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Delivery areas',
+                    style: Theme.of(context).textTheme.headlineLarge,
+                  ),
+                  const Text(
+                    'Only locations inside an active area can place orders.',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: editZone,
+              icon: const Icon(Icons.add_location_alt_rounded),
+              label: const Text('Add area'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        if (widget.store.deliveryZones.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'No delivery areas are active. Clients cannot place orders.',
+              ),
+            ),
+          )
+        else
+          ...widget.store.deliveryZones.map(
+            (zone) => Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.sand,
+                  child: const Icon(Icons.location_on_rounded),
+                ),
+                title: Text(
+                  zone.name,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  '${zone.radiusKm.toStringAsFixed(1)} km radius · '
+                  '${zone.centerLatitude.toStringAsFixed(5)}, '
+                  '${zone.centerLongitude.toStringAsFixed(5)}',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Switch(
+                      value: zone.isActive,
+                      onChanged: (active) =>
+                          widget.store.setDeliveryZoneActive(zone, active),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit delivery area',
+                      onPressed: () => editZone(zone),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete delivery area',
+                      onPressed: () => deleteZone(zone),
+                      color: Colors.red,
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _DeliveryZoneDialog extends StatefulWidget {
+  const _DeliveryZoneDialog({this.existing});
+
+  final DeliveryZone? existing;
+
+  @override
+  State<_DeliveryZoneDialog> createState() => _DeliveryZoneDialogState();
+}
+
+class _DeliveryZoneDialogState extends State<_DeliveryZoneDialog> {
+  final formKey = GlobalKey<FormState>();
+  late final TextEditingController nameController;
+  late final TextEditingController latitudeController;
+  late final TextEditingController longitudeController;
+  late final TextEditingController radiusController;
+
+  double get latitude => double.tryParse(latitudeController.text) ?? 33.8938;
+  double get longitude => double.tryParse(longitudeController.text) ?? 35.5018;
+  double get radiusKm => double.tryParse(radiusController.text) ?? 12;
+
+  @override
+  void initState() {
+    super.initState();
+    final zone = widget.existing;
+    nameController = TextEditingController(text: zone?.name ?? '');
+    latitudeController = TextEditingController(
+      text: (zone?.centerLatitude ?? 33.8938).toStringAsFixed(6),
+    );
+    longitudeController = TextEditingController(
+      text: (zone?.centerLongitude ?? 35.5018).toStringAsFixed(6),
+    );
+    radiusController = TextEditingController(
+      text: (zone?.radiusKm ?? 12).toStringAsFixed(1),
+    );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    latitudeController.dispose();
+    longitudeController.dispose();
+    radiusController.dispose();
+    super.dispose();
+  }
+
+  void selectCenter(LatLng position) {
+    latitudeController.text = position.latitude.toStringAsFixed(6);
+    longitudeController.text = position.longitude.toStringAsFixed(6);
+    setState(() {});
+  }
+
+  String? validateCoordinate(String? value, double minimum, double maximum) {
+    final parsed = double.tryParse(value?.trim() ?? '');
+    if (parsed == null || parsed < minimum || parsed > maximum) {
+      return 'Enter a value from $minimum to $maximum';
+    }
+    return null;
+  }
+
+  void submit() {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(context, (
+      name: nameController.text.trim(),
+      latitude: latitude,
+      longitude: longitude,
+      radiusKm: radiusKm,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.existing == null ? 'Add delivery area' : 'Edit area'),
+    content: SizedBox(
+      width: 520,
+      child: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Area name'),
+                validator: (value) => (value?.trim().length ?? 0) < 2
+                    ? 'Enter an area name'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 220,
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: LatLng(latitude, longitude),
+                      zoom: 11,
+                    ),
+                    markers: {
+                      Marker(
+                        markerId: const MarkerId('delivery-area-center'),
+                        position: LatLng(latitude, longitude),
+                      ),
+                    },
+                    circles: {
+                      Circle(
+                        circleId: const CircleId('delivery-area-radius'),
+                        center: LatLng(latitude, longitude),
+                        radius: radiusKm * 1000,
+                        fillColor: AppColors.ember.withValues(alpha: 0.12),
+                        strokeColor: AppColors.ember,
+                        strokeWidth: 2,
+                      ),
+                    },
+                    onTap: selectCenter,
+                    mapToolbarEnabled: false,
+                    zoomControlsEnabled: false,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tap the map to set the centre, then choose the radius.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: latitudeController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      ),
+                      decoration: const InputDecoration(labelText: 'Latitude'),
+                      validator: (value) => validateCoordinate(value, -90, 90),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextFormField(
+                      controller: longitudeController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      ),
+                      decoration: const InputDecoration(labelText: 'Longitude'),
+                      validator: (value) =>
+                          validateCoordinate(value, -180, 180),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: radiusController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Delivery radius (km)',
+                ),
+                validator: (value) {
+                  final parsed = double.tryParse(value?.trim() ?? '');
+                  if (parsed == null || parsed <= 0 || parsed > 500) {
+                    return 'Enter a radius from 0.1 to 500 km';
+                  }
+                  return null;
+                },
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: submit, child: const Text('Save area')),
     ],
   );
 }

@@ -670,6 +670,28 @@ class OrdersPage extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
     try {
       await store.changeOrderStatus(order, OrderStage.finishedUsing);
+      if (context.mounted) await rateOrder(context, order);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
+  Future<void> rateOrder(BuildContext context, AppOrder order) async {
+    final result = await showDialog<({int rating, String? comment})>(
+      context: context,
+      builder: (_) => const _OrderRatingDialog(),
+    );
+    if (result == null || !context.mounted) return;
+    try {
+      await store.rateOrder(
+        order,
+        rating: result.rating,
+        comment: result.comment,
+      );
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -723,6 +745,27 @@ class OrdersPage extends StatelessWidget {
                           OrderStatusPill(stage: order.stage),
                         ],
                       ),
+                      if (order.rating case final rating?) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            ...List.generate(
+                              5,
+                              (index) => Icon(
+                                index < rating
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                size: 20,
+                                color: Colors.amber.shade700,
+                              ),
+                            ),
+                            if (order.ratingComment case final comment?) ...[
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(comment)),
+                            ],
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Text(order.items),
                       const SizedBox(height: 8),
@@ -811,6 +854,20 @@ class OrdersPage extends StatelessWidget {
                           label: const Text('Order again'),
                         ),
                       ],
+                      if ({
+                            OrderStage.finishedUsing,
+                            OrderStage.collected,
+                          }.contains(order.stage) &&
+                          order.rating == null) ...[
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: store.loading
+                              ? null
+                              : () => rateOrder(context, order),
+                          icon: const Icon(Icons.star_outline_rounded),
+                          label: const Text('Rate this order'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -820,6 +877,70 @@ class OrdersPage extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class _OrderRatingDialog extends StatefulWidget {
+  const _OrderRatingDialog();
+
+  @override
+  State<_OrderRatingDialog> createState() => _OrderRatingDialogState();
+}
+
+class _OrderRatingDialogState extends State<_OrderRatingDialog> {
+  final commentController = TextEditingController();
+  int rating = 5;
+
+  @override
+  void dispose() {
+    commentController.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    final comment = commentController.text.trim();
+    Navigator.pop(context, (
+      rating: rating,
+      comment: comment.isEmpty ? null : comment,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    icon: const Icon(Icons.star_rounded, color: Colors.amber),
+    title: const Text('How was your order?'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            5,
+            (index) => IconButton(
+              tooltip: '${index + 1} star${index == 0 ? '' : 's'}',
+              onPressed: () => setState(() => rating = index + 1),
+              icon: Icon(
+                index < rating ? Icons.star_rounded : Icons.star_border_rounded,
+                color: Colors.amber.shade700,
+              ),
+            ),
+          ),
+        ),
+        TextField(
+          controller: commentController,
+          maxLength: 500,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: 'Comment (optional)'),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Not now'),
+      ),
+      FilledButton(onPressed: submit, child: const Text('Submit rating')),
+    ],
   );
 }
 

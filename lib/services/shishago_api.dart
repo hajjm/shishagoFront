@@ -95,6 +95,46 @@ class ShishaGoApi {
     authenticated: true,
   );
 
+  Future<List<Map<String, dynamic>>> getDeliveryZones() =>
+      _listRequest('GET', '/delivery-zones', authenticated: true);
+
+  Future<Map<String, dynamic>> checkDeliveryAvailability({
+    required double latitude,
+    required double longitude,
+  }) => _mapRequest(
+    'GET',
+    '/delivery-zones/check?${Uri(queryParameters: {'latitude': '$latitude', 'longitude': '$longitude'}).query}',
+    authenticated: true,
+  );
+
+  Future<Map<String, dynamic>> createDeliveryZone(
+    Map<String, dynamic> payload,
+  ) => _mapRequest(
+    'POST',
+    '/delivery-zones',
+    body: payload,
+    authenticated: true,
+  );
+
+  Future<Map<String, dynamic>> updateDeliveryZone(
+    String zoneId,
+    Map<String, dynamic> changes,
+  ) => _mapRequest(
+    'PATCH',
+    '/delivery-zones/$zoneId',
+    body: changes,
+    authenticated: true,
+  );
+
+  Future<void> deleteDeliveryZone(String zoneId) async {
+    final response = await _send(
+      'DELETE',
+      '/delivery-zones/$zoneId',
+      authenticated: true,
+    );
+    _ensureSuccess(response);
+  }
+
   Future<List<Map<String, dynamic>>> getOrders({
     String? status,
     String? search,
@@ -194,6 +234,17 @@ class ShishaGoApi {
     '/orders/$orderId/status',
     authenticated: true,
     body: {'status': status},
+  );
+
+  Future<Map<String, dynamic>> rateOrder(
+    String orderId, {
+    required int rating,
+    String? comment,
+  }) => _mapRequest(
+    'PUT',
+    '/orders/$orderId/rating',
+    authenticated: true,
+    body: {'rating': rating, 'comment': comment},
   );
 
   Future<Map<String, dynamic>> assignDriver(String orderId, String driverId) =>

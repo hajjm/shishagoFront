@@ -43,6 +43,20 @@ class _UnavailableSocketApi extends ShishaGoApi {
   }) async => [];
 
   @override
+  Future<List<Map<String, dynamic>>> getDeliveryZones() async => [
+    {
+      'id': 'zone-beirut',
+      'name': 'Beirut',
+      'center_latitude': 33.8938,
+      'center_longitude': 35.5018,
+      'radius_km': 12,
+      'is_active': true,
+      'created_at': '2026-09-15T00:00:00Z',
+      'updated_at': '2026-09-15T00:00:00Z',
+    },
+  ];
+
+  @override
   Future<List<Map<String, dynamic>>> getSavedLocations() async => [
     {
       'id': 'location-1',

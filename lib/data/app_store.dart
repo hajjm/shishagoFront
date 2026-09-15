@@ -83,6 +83,7 @@ class ShishaGoStore extends ChangeNotifier {
 
   List<Product> products = [];
   List<MarketCategory> marketCategories = [];
+  List<DeliveryZone> deliveryZones = [];
   List<AppOrder> orders = [];
   List<AppUser> users = [];
   List<SavedLocation> savedLocations = [];
@@ -155,6 +156,9 @@ class ShishaGoStore extends ChangeNotifier {
     marketCategories = (await api.getMarketCategories(
       activeOnly: role != UserRole.owner,
     )).map(MarketCategory.fromJson).toList();
+    deliveryZones = (await api.getDeliveryZones())
+        .map(DeliveryZone.fromJson)
+        .toList();
     orders = (await api.getOrders()).map(AppOrder.fromJson).toList();
     notifications = (await api.getNotifications())
         .map(AppNotification.fromJson)
@@ -308,6 +312,66 @@ class ShishaGoStore extends ChangeNotifier {
     await refreshSavedLocations();
   }
 
+  DeliveryZone? deliveryZoneFor(SavedLocation location) {
+    for (final zone in deliveryZones) {
+      if (zone.isActive &&
+          zone.contains(location.latitude, location.longitude)) {
+        return zone;
+      }
+    }
+    return null;
+  }
+
+  Future<DeliveryAvailability> checkDeliveryAvailability(
+    SavedLocation location,
+  ) async => DeliveryAvailability.fromJson(
+    await api.checkDeliveryAvailability(
+      latitude: location.latitude,
+      longitude: location.longitude,
+    ),
+  );
+
+  Future<void> saveDeliveryZone({
+    DeliveryZone? existing,
+    required String name,
+    required double centerLatitude,
+    required double centerLongitude,
+    required double radiusKm,
+  }) => _run(() async {
+    final payload = {
+      'name': name,
+      'center_latitude': centerLatitude,
+      'center_longitude': centerLongitude,
+      'radius_km': radiusKm,
+    };
+    final updated = DeliveryZone.fromJson(
+      existing == null
+          ? await api.createDeliveryZone(payload)
+          : await api.updateDeliveryZone(existing.id, payload),
+    );
+    final index = deliveryZones.indexWhere((zone) => zone.id == updated.id);
+    if (index == -1) {
+      deliveryZones.add(updated);
+    } else {
+      deliveryZones[index] = updated;
+    }
+    deliveryZones.sort((left, right) => left.name.compareTo(right.name));
+  });
+
+  Future<void> setDeliveryZoneActive(DeliveryZone zone, bool active) =>
+      _run(() async {
+        final updated = DeliveryZone.fromJson(
+          await api.updateDeliveryZone(zone.id, {'is_active': active}),
+        );
+        final index = deliveryZones.indexWhere((value) => value.id == zone.id);
+        if (index != -1) deliveryZones[index] = updated;
+      });
+
+  Future<void> deleteDeliveryZone(DeliveryZone zone) => _run(() async {
+    await api.deleteDeliveryZone(zone.id);
+    deliveryZones.removeWhere((value) => value.id == zone.id);
+  });
+
   Future<void> refreshSavedLocations() async {
     savedLocations = (await api.getSavedLocations())
         .map(SavedLocation.fromJson)
@@ -327,6 +391,17 @@ class ShishaGoStore extends ChangeNotifier {
         );
         _replaceOrder(updated);
       });
+
+  Future<void> rateOrder(
+    AppOrder order, {
+    required int rating,
+    String? comment,
+  }) => _run(() async {
+    final updated = AppOrder.fromJson(
+      await api.rateOrder(order.id, rating: rating, comment: comment),
+    );
+    _replaceOrder(updated);
+  });
 
   Future<void> assignDriver(AppOrder order, AppUser driver) => _run(() async {
     final updated = AppOrder.fromJson(

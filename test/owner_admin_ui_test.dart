@@ -28,6 +28,8 @@ AppOrder assignedOrder({
   required String clientName,
   required String clientPhone,
   required OrderStage stage,
+  int? rating,
+  String? ratingComment,
 }) => AppOrder(
   id: id,
   reference: reference,
@@ -43,6 +45,8 @@ AppOrder assignedOrder({
   address: 'Beirut',
   latitude: 33.89,
   longitude: 35.50,
+  rating: rating,
+  ratingComment: ratingComment,
 );
 
 void main() {
@@ -61,6 +65,32 @@ void main() {
       find.widgetWithText(TextField, 'Search by order ID'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('owner sees the client rating beside its order', (tester) async {
+    final store = createStore();
+    addTearDown(store.dispose);
+    addTearDown(store.api.close);
+    store.orders = [
+      assignedOrder(
+        id: 'rated-1',
+        reference: 'SH-RATED',
+        clientName: 'Happy Client',
+        clientPhone: '+96170000003',
+        stage: OrderStage.finishedUsing,
+        rating: 4,
+        ratingComment: 'Very good delivery',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OwnerOrdersPage(store: store)),
+      ),
+    );
+
+    expect(find.text('4/5'), findsOneWidget);
+    expect(find.text('Very good delivery'), findsOneWidget);
   });
 
   testWidgets('catalog price accepts digits and two decimal places only', (

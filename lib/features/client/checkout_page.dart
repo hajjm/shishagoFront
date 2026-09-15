@@ -43,6 +43,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return null;
   }
 
+  DeliveryZone? get selectedDeliveryZone {
+    final location = selectedLocation;
+    return location == null ? null : widget.store.deliveryZoneFor(location);
+  }
+
   @override
   void dispose() {
     notesController.dispose();
@@ -86,6 +91,28 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select or add a delivery location')),
       );
+      return;
+    }
+    try {
+      final availability = await widget.store.checkDeliveryAvailability(
+        location,
+      );
+      if (!mounted) return;
+      if (!availability.available) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This location is outside the current Shisha Go delivery area.',
+            ),
+          ),
+        );
+        return;
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -272,7 +299,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   key: ValueKey(location.id),
                   initialCameraPosition: CameraPosition(
                     target: LatLng(location.latitude, location.longitude),
-                    zoom: 16,
+                    zoom: 12,
                   ),
                   mapToolbarEnabled: false,
                   zoomControlsEnabled: false,
@@ -286,15 +313,49 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       ),
                     ),
                   },
+                  circles: widget.store.deliveryZones
+                      .where((zone) => zone.isActive)
+                      .map(
+                        (zone) => Circle(
+                          circleId: CircleId(zone.id),
+                          center: LatLng(
+                            zone.centerLatitude,
+                            zone.centerLongitude,
+                          ),
+                          radius: zone.radiusKm * 1000,
+                          fillColor: AppColors.ember.withValues(alpha: 0.10),
+                          strokeColor: AppColors.ember,
+                          strokeWidth: 2,
+                        ),
+                      )
+                      .toSet(),
                 ),
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              'Confirm that this pin is your intended delivery point.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+            Card(
+              color: selectedDeliveryZone == null
+                  ? Colors.red.withValues(alpha: 0.08)
+                  : Colors.green.withValues(alpha: 0.08),
+              child: ListTile(
+                dense: true,
+                leading: Icon(
+                  selectedDeliveryZone == null
+                      ? Icons.location_off_rounded
+                      : Icons.check_circle_rounded,
+                  color: selectedDeliveryZone == null
+                      ? Colors.red
+                      : Colors.green,
+                ),
+                title: Text(
+                  selectedDeliveryZone == null
+                      ? 'Outside the current delivery area'
+                      : 'Delivery available in ${selectedDeliveryZone!.name}',
+                ),
+                subtitle: const Text(
+                  'Confirm that this pin is your intended delivery point.',
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 18),
@@ -326,7 +387,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: submitting ? null : placeOrder,
+            onPressed:
+                submitting ||
+                    selectedLocation == null ||
+                    selectedDeliveryZone == null
+                ? null
+                : placeOrder,
             icon: submitting
                 ? const SizedBox.square(
                     dimension: 18,
@@ -371,141 +437,162 @@ class _PriceRow extends StatelessWidget {
 Future<SavedLocation?> showAddDeliveryLocation(
   BuildContext context,
   ShishaGoStore store,
-) async {
+) => showDialog<SavedLocation>(
+  context: context,
+  builder: (_) => _AddDeliveryLocationDialog(store: store),
+);
+
+class _AddDeliveryLocationDialog extends StatefulWidget {
+  const _AddDeliveryLocationDialog({required this.store});
+
+  final ShishaGoStore store;
+
+  @override
+  State<_AddDeliveryLocationDialog> createState() =>
+      _AddDeliveryLocationDialogState();
+}
+
+class _AddDeliveryLocationDialogState
+    extends State<_AddDeliveryLocationDialog> {
   final formKey = GlobalKey<FormState>();
   final labelController = TextEditingController();
   final addressController = TextEditingController();
   CapturedLocation? coordinates;
-  var capturing = false;
-  var saving = false;
-  var makeDefault = store.savedLocations.isEmpty;
+  bool capturing = false;
+  bool saving = false;
+  late bool makeDefault;
   String? error;
 
-  final result = await showDialog<SavedLocation>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Add delivery location'),
-        content: SizedBox(
-          width: 430,
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: labelController,
-                    decoration: const InputDecoration(
-                      labelText: 'Label',
-                      hintText: 'Home, Work, Friend…',
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Enter a label'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Address details',
-                      hintText: 'Street, building, floor',
-                    ),
-                    validator: (value) =>
-                        value == null || value.trim().length < 3
-                        ? 'Enter the delivery address'
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: capturing
-                        ? null
-                        : () async {
-                            setDialogState(() {
-                              capturing = true;
-                              error = null;
-                            });
-                            try {
-                              final value = await const DeviceLocationService()
-                                  .captureCurrent();
-                              setDialogState(() => coordinates = value);
-                            } catch (exception) {
-                              setDialogState(
-                                () => error = exception.toString(),
-                              );
-                            } finally {
-                              setDialogState(() => capturing = false);
-                            }
-                          },
-                    icon: const Icon(Icons.my_location_rounded),
-                    label: Text(
-                      coordinates == null
-                          ? 'Use current GPS position'
-                          : 'GPS captured — update',
-                    ),
-                  ),
-                  if (coordinates != null)
-                    Text(
-                      coordinates!.label,
-                      style: const TextStyle(color: AppColors.muted),
-                    ),
-                  if (error != null)
-                    Text(error!, style: const TextStyle(color: Colors.red)),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: makeDefault,
-                    onChanged: (value) =>
-                        setDialogState(() => makeDefault = value ?? false),
-                    title: const Text('Use as my default location'),
-                  ),
-                ],
+  @override
+  void initState() {
+    super.initState();
+    makeDefault = widget.store.savedLocations.isEmpty;
+  }
+
+  @override
+  void dispose() {
+    labelController.dispose();
+    addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> captureLocation() async {
+    setState(() {
+      capturing = true;
+      error = null;
+    });
+    try {
+      final value = await const DeviceLocationService().captureCurrent();
+      if (!mounted) return;
+      setState(() => coordinates = value);
+    } catch (exception) {
+      if (!mounted) return;
+      setState(() => error = exception.toString());
+    } finally {
+      if (mounted) setState(() => capturing = false);
+    }
+  }
+
+  Future<void> save() async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    final selectedCoordinates = coordinates;
+    if (selectedCoordinates == null) {
+      setState(() => error = 'Capture the GPS position for this address.');
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      final location = await widget.store.addSavedLocation(
+        label: labelController.text.trim(),
+        address: addressController.text.trim(),
+        latitude: selectedCoordinates.latitude,
+        longitude: selectedCoordinates.longitude,
+        isDefault: makeDefault,
+      );
+      if (mounted) Navigator.pop(context, location);
+    } catch (exception) {
+      if (!mounted) return;
+      setState(() {
+        saving = false;
+        error = exception.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Add delivery location'),
+    content: SizedBox(
+      width: 430,
+      child: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: labelController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Label',
+                  hintText: 'Home, Work, Friend…',
+                ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Enter a label'
+                    : null,
               ),
-            ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: addressController,
+                decoration: const InputDecoration(
+                  labelText: 'Address details',
+                  hintText: 'Street, building, floor',
+                ),
+                validator: (value) => value == null || value.trim().length < 3
+                    ? 'Enter the delivery address'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: capturing ? null : captureLocation,
+                icon: const Icon(Icons.my_location_rounded),
+                label: Text(
+                  coordinates == null
+                      ? 'Use current GPS position'
+                      : 'GPS captured — update',
+                ),
+              ),
+              if (coordinates != null)
+                Text(
+                  coordinates!.label,
+                  style: const TextStyle(color: AppColors.muted),
+                ),
+              if (error != null)
+                Text(error!, style: const TextStyle(color: Colors.red)),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: makeDefault,
+                onChanged: (value) =>
+                    setState(() => makeDefault = value ?? false),
+                title: const Text('Use as my default location'),
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: saving ? null : () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: saving
-                ? null
-                : () async {
-                    if (!formKey.currentState!.validate()) return;
-                    if (coordinates == null) {
-                      setDialogState(
-                        () => error =
-                            'Capture the GPS position for this address.',
-                      );
-                      return;
-                    }
-                    setDialogState(() => saving = true);
-                    try {
-                      final location = await store.addSavedLocation(
-                        label: labelController.text.trim(),
-                        address: addressController.text.trim(),
-                        latitude: coordinates!.latitude,
-                        longitude: coordinates!.longitude,
-                        isDefault: makeDefault,
-                      );
-                      if (dialogContext.mounted) {
-                        Navigator.pop(dialogContext, location);
-                      }
-                    } catch (exception) {
-                      setDialogState(() {
-                        saving = false;
-                        error = exception.toString();
-                      });
-                    }
-                  },
-            child: const Text('Save location'),
-          ),
-        ],
       ),
     ),
+    actions: [
+      TextButton(
+        onPressed: saving ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: saving ? null : save,
+        child: Text(saving ? 'Saving…' : 'Save location'),
+      ),
+    ],
   );
-  labelController.dispose();
-  addressController.dispose();
-  return result;
 }
