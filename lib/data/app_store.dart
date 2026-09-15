@@ -416,6 +416,11 @@ class ShishaGoStore extends ChangeNotifier {
     users[index] = updated;
   });
 
+  Future<void> deleteDriver(AppUser driver) => _run(() async {
+    await api.deleteUser(driver.id);
+    users.removeWhere((user) => user.id == driver.id);
+  });
+
   Future<void> exportOrders({
     String? status,
     String? search,

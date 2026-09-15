@@ -232,7 +232,37 @@ void main() {
     expect(find.text('Client One'), findsNothing);
     expect(find.text('Driver One'), findsOneWidget);
     expect(find.text('Add driver'), findsOneWidget);
+    expect(find.byTooltip('Delete driver'), findsOneWidget);
   });
+
+  testWidgets(
+    'add driver dialog owns controllers for its full route lifetime',
+    (tester) async {
+      final store = createStore();
+      addTearDown(store.dispose);
+      addTearDown(store.api.close);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: OwnerPeoplePage(store: store)),
+        ),
+      );
+      await tester.tap(find.text('Drivers'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add driver'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Full name'),
+        'Driver Two',
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add driver'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('owner side menu expands and collapses', (tester) async {
     tester.view.physicalSize = const Size(1200, 800);

@@ -1345,48 +1345,59 @@ class OwnerPeoplePage extends StatefulWidget {
 class _OwnerPeoplePageState extends State<OwnerPeoplePage> {
   UserRole selectedRole = UserRole.client;
 
-  Future<void> addDriver(BuildContext context) async {
-    final name = TextEditingController();
-    final phone = TextEditingController(text: '+961 ');
-    await showDialog<void>(
+  Future<void> deleteDriver(AppUser driver) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add driver'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: const InputDecoration(labelText: 'Full name'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'WhatsApp phone'),
-            ),
-          ],
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete driver?'),
+        content: Text(
+          'Delete ${driver.name} permanently? This action cannot be undone.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () async {
-              await widget.store.createDriver(
-                name: name.text,
-                phone: phone.text,
-              );
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Create'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
-    name.dispose();
-    phone.dispose();
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.store.deleteDriver(driver);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${driver.name} was deleted.')));
+    } catch (exception) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete driver: $exception')),
+      );
+    }
+  }
+
+  Future<void> addDriver() async {
+    final driver = await showDialog<({String name, String phone})>(
+      context: context,
+      builder: (_) => const _AddDriverDialog(),
+    );
+
+    if (driver == null || !mounted) return;
+
+    try {
+      await widget.store.createDriver(name: driver.name, phone: driver.phone);
+    } catch (exception) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not create driver: $exception')),
+      );
+    }
   }
 
   @override
@@ -1419,7 +1430,7 @@ class _OwnerPeoplePageState extends State<OwnerPeoplePage> {
               ),
               if (selectedRole == UserRole.driver)
                 FilledButton.icon(
-                  onPressed: () => addDriver(context),
+                  onPressed: addDriver,
                   icon: const Icon(Icons.person_add_alt_1_rounded),
                   label: const Text('Add driver'),
                 ),
@@ -1476,10 +1487,22 @@ class _OwnerPeoplePageState extends State<OwnerPeoplePage> {
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text('${user.role.name} · ${user.phone}'),
-                  trailing: Switch(
-                    value: user.isActive,
-                    onChanged: (value) =>
-                        widget.store.setUserActive(user, value),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: user.isActive,
+                        onChanged: (value) =>
+                            widget.store.setUserActive(user, value),
+                      ),
+                      if (user.role == UserRole.driver)
+                        IconButton(
+                          tooltip: 'Delete driver',
+                          onPressed: () => deleteDriver(user),
+                          color: Colors.red,
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -1487,5 +1510,61 @@ class _OwnerPeoplePageState extends State<OwnerPeoplePage> {
         ],
       );
     },
+  );
+}
+
+class _AddDriverDialog extends StatefulWidget {
+  const _AddDriverDialog();
+
+  @override
+  State<_AddDriverDialog> createState() => _AddDriverDialogState();
+}
+
+class _AddDriverDialogState extends State<_AddDriverDialog> {
+  final nameController = TextEditingController();
+  final phoneController = TextEditingController(text: '+961 ');
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    final name = nameController.text.trim();
+    final phone = phoneController.text.trim();
+    if (name.isEmpty || phone.isEmpty) return;
+    Navigator.pop(context, (name: name, phone: phone));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Add driver'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          controller: nameController,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(labelText: 'Full name'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: phoneController,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => submit(),
+          decoration: const InputDecoration(labelText: 'WhatsApp phone'),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: submit, child: const Text('Create')),
+    ],
   );
 }

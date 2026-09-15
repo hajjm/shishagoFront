@@ -248,6 +248,15 @@ class ShishaGoApi {
     authenticated: true,
   );
 
+  Future<void> deleteUser(String userId) async {
+    final response = await _send(
+      'DELETE',
+      '/users/$userId',
+      authenticated: true,
+    );
+    _ensureSuccess(response);
+  }
+
   Future<Map<String, dynamic>> getDashboardSummary() =>
       _mapRequest('GET', '/dashboard/summary', authenticated: true);
 
