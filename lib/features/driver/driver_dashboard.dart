@@ -447,6 +447,26 @@ class _DeliveryCard extends StatelessWidget {
                     style: const TextStyle(color: Colors.white70),
                   ),
                 ],
+                if (order.bringChange) ...[
+                  const SizedBox(height: 7),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.payments_outlined,
+                        color: AppColors.sand,
+                        size: 19,
+                      ),
+                      SizedBox(width: 7),
+                      Text(
+                        'CLIENT REQUESTED CHANGE',
+                        style: TextStyle(
+                          color: AppColors.sand,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Text(
                   'Order total: \$${order.total.toStringAsFixed(2)}',

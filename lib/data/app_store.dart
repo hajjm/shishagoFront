@@ -84,6 +84,7 @@ class ShishaGoStore extends ChangeNotifier {
   List<Product> products = [];
   List<MarketCategory> marketCategories = [];
   List<DeliveryZone> deliveryZones = [];
+  DeliveryPricing? deliveryPricing;
   List<AppOrder> orders = [];
   List<AppUser> users = [];
   List<SavedLocation> savedLocations = [];
@@ -159,6 +160,7 @@ class ShishaGoStore extends ChangeNotifier {
     deliveryZones = (await api.getDeliveryZones())
         .map(DeliveryZone.fromJson)
         .toList();
+    deliveryPricing = DeliveryPricing.fromJson(await api.getDeliveryPricing());
     orders = (await api.getOrders()).map(AppOrder.fromJson).toList();
     notifications = (await api.getNotifications())
         .map(AppNotification.fromJson)
@@ -248,6 +250,7 @@ class ShishaGoStore extends ChangeNotifier {
   Future<AppOrder> checkout({
     required SavedLocation location,
     String notes = '',
+    bool bringChange = false,
   }) async {
     if (_cart.isEmpty) {
       throw const ShishaGoApiException('Your cart is empty', 400);
@@ -274,6 +277,7 @@ class ShishaGoStore extends ChangeNotifier {
       longitude: location.longitude,
       deliveryLocationId: location.id,
       notes: notes,
+      bringChange: bringChange,
     );
     final order = AppOrder.fromJson(response);
     _cart.clear();
@@ -370,6 +374,20 @@ class ShishaGoStore extends ChangeNotifier {
   Future<void> deleteDeliveryZone(DeliveryZone zone) => _run(() async {
     await api.deleteDeliveryZone(zone.id);
     deliveryZones.removeWhere((value) => value.id == zone.id);
+  });
+
+  Future<void> saveDeliveryPricing({
+    required double storeLatitude,
+    required double storeLongitude,
+    required List<DeliveryFeeTier> tiers,
+  }) => _run(() async {
+    deliveryPricing = DeliveryPricing.fromJson(
+      await api.updateDeliveryPricing({
+        'store_latitude': storeLatitude,
+        'store_longitude': storeLongitude,
+        'tiers': tiers.map((tier) => tier.toJson()).toList(),
+      }),
+    );
   });
 
   Future<void> refreshSavedLocations() async {

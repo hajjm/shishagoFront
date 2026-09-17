@@ -201,4 +201,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('checkout lets the client request that the driver bring change', (
+    tester,
+  ) async {
+    final api = ShishaGoApi(baseUrl: 'http://127.0.0.1:8001');
+    final store = ShishaGoStore(api: api, session: SessionController(api));
+    addTearDown(store.dispose);
+    addTearDown(api.close);
+
+    await tester.pumpWidget(MaterialApp(home: CheckoutPage(store: store)));
+    expect(find.text('Ask the driver to bring change'), findsOneWidget);
+    final checkbox = find.byType(Checkbox);
+    expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+    await tester.tap(find.text('Ask the driver to bring change'));
+    await tester.pump();
+    expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+  });
 }

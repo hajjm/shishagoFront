@@ -350,9 +350,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                     "Today's summary",
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  subtitle: const Text(
-                    'Orders, revenue and active deliveries',
-                  ),
+                  subtitle: const Text('Orders, revenue and active deliveries'),
                   children: [
                     _CompactMetricRow(
                       label: 'Orders today',
@@ -664,6 +662,14 @@ class _OwnerOrderCard extends StatelessWidget {
                   '${order.items}\n${order.address}',
                   style: const TextStyle(color: AppColors.muted),
                 ),
+                if (order.bringChange)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Chip(
+                      avatar: Icon(Icons.payments_outlined),
+                      label: Text('Bring change requested'),
+                    ),
+                  ),
                 if (order.rating case final rating?) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -1694,6 +1700,28 @@ class OwnerDeliveryZonesPage extends StatefulWidget {
 }
 
 class _OwnerDeliveryZonesPageState extends State<OwnerDeliveryZonesPage> {
+  Future<void> editPricing() async {
+    final pricing = widget.store.deliveryPricing;
+    if (pricing == null) return;
+    final result = await showDialog<DeliveryPricing>(
+      context: context,
+      builder: (_) => _DeliveryPricingDialog(pricing: pricing),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await widget.store.saveDeliveryPricing(
+        storeLatitude: result.storeLatitude,
+        storeLongitude: result.storeLongitude,
+        tiers: result.tiers,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
   Future<void> editZone([DeliveryZone? existing]) async {
     final result =
         await showDialog<
@@ -1782,6 +1810,61 @@ class _OwnerDeliveryZonesPageState extends State<OwnerDeliveryZonesPage> {
           ],
         ),
         const SizedBox(height: 20),
+        if (widget.store.deliveryPricing case final pricing?) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const CircleAvatar(child: Icon(Icons.payments_outlined)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Distance-based delivery charges',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              'Store: ${pricing.storeLatitude.toStringAsFixed(5)}, '
+                              '${pricing.storeLongitude.toStringAsFixed(5)}',
+                              style: const TextStyle(color: AppColors.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Edit delivery charges',
+                        onPressed: editPricing,
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: pricing.tiers
+                        .map(
+                          (tier) => Chip(
+                            label: Text(
+                              'Up to ${tier.maxDistanceKm.toStringAsFixed(1)} km · '
+                              '\$${tier.fee.toStringAsFixed(2)}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (widget.store.deliveryZones.isEmpty)
           const Card(
             child: Padding(
@@ -1840,6 +1923,294 @@ class _OwnerDeliveryZonesPageState extends State<OwnerDeliveryZonesPage> {
       ],
     ),
   );
+}
+
+class _DeliveryPricingDialog extends StatefulWidget {
+  const _DeliveryPricingDialog({required this.pricing});
+
+  final DeliveryPricing pricing;
+
+  @override
+  State<_DeliveryPricingDialog> createState() => _DeliveryPricingDialogState();
+}
+
+class _DeliveryPricingDialogState extends State<_DeliveryPricingDialog> {
+  final formKey = GlobalKey<FormState>();
+  late final TextEditingController latitudeController;
+  late final TextEditingController longitudeController;
+  final tiers = <_FeeTierControllers>[];
+
+  double get latitude =>
+      double.tryParse(latitudeController.text) ?? widget.pricing.storeLatitude;
+  double get longitude =>
+      double.tryParse(longitudeController.text) ??
+      widget.pricing.storeLongitude;
+
+  @override
+  void initState() {
+    super.initState();
+    latitudeController = TextEditingController(
+      text: widget.pricing.storeLatitude.toStringAsFixed(6),
+    );
+    longitudeController = TextEditingController(
+      text: widget.pricing.storeLongitude.toStringAsFixed(6),
+    );
+    tiers.addAll(widget.pricing.tiers.map(_FeeTierControllers.fromTier));
+  }
+
+  @override
+  void dispose() {
+    latitudeController.dispose();
+    longitudeController.dispose();
+    for (final tier in tiers) {
+      tier.dispose();
+    }
+    super.dispose();
+  }
+
+  void selectStore(LatLng value) {
+    latitudeController.text = value.latitude.toStringAsFixed(6);
+    longitudeController.text = value.longitude.toStringAsFixed(6);
+    setState(() {});
+  }
+
+  void addTier() {
+    setState(() {
+      tiers.add(
+        _FeeTierControllers(
+          maxDistance: TextEditingController(),
+          fee: TextEditingController(),
+        ),
+      );
+    });
+  }
+
+  void removeTier(int index) {
+    final removed = tiers.removeAt(index);
+    removed.dispose();
+    setState(() {});
+  }
+
+  void submit() {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    if (tiers.isEmpty) return;
+    final values =
+        tiers
+            .map(
+              (tier) => DeliveryFeeTier(
+                maxDistanceKm: double.parse(tier.maxDistance.text),
+                fee: double.parse(tier.fee.text),
+              ),
+            )
+            .toList()
+          ..sort(
+            (left, right) => left.maxDistanceKm.compareTo(right.maxDistanceKm),
+          );
+    if (values.map((tier) => tier.maxDistanceKm).toSet().length !=
+        values.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Each maximum distance must be unique.')),
+      );
+      return;
+    }
+    Navigator.pop(
+      context,
+      DeliveryPricing(
+        storeLatitude: latitude,
+        storeLongitude: longitude,
+        tiers: values,
+      ),
+    );
+  }
+
+  String? positiveNumber(String? value, String label) {
+    final parsed = double.tryParse(value?.trim() ?? '');
+    if (parsed == null || parsed <= 0) return 'Enter a valid $label';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Delivery charges'),
+    content: SizedBox(
+      width: 560,
+      child: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Set the store location used to measure delivery distance.',
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 190,
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: LatLng(latitude, longitude),
+                      zoom: 13,
+                    ),
+                    markers: {
+                      Marker(
+                        markerId: const MarkerId('store-location'),
+                        position: LatLng(latitude, longitude),
+                      ),
+                    },
+                    onTap: selectStore,
+                    mapToolbarEnabled: false,
+                    zoomControlsEnabled: false,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: latitudeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Store latitude',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      ),
+                      validator: (value) {
+                        final parsed = double.tryParse(value ?? '');
+                        return parsed == null || parsed < -90 || parsed > 90
+                            ? 'Invalid latitude'
+                            : null;
+                      },
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextFormField(
+                      controller: longitudeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Store longitude',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      ),
+                      validator: (value) {
+                        final parsed = double.tryParse(value ?? '');
+                        return parsed == null || parsed < -180 || parsed > 180
+                            ? 'Invalid longitude'
+                            : null;
+                      },
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Distance tiers',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: addTier,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add tier'),
+                  ),
+                ],
+              ),
+              const Text(
+                'The first tier whose maximum distance includes the client is used.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: 8),
+              ...tiers.asMap().entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.value.maxDistance,
+                          decoration: const InputDecoration(
+                            labelText: 'Up to km',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          validator: (value) =>
+                              positiveNumber(value, 'distance'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.value.fee,
+                          decoration: const InputDecoration(
+                            labelText: 'Charge (USD)',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(value ?? '');
+                            return parsed == null || parsed < 0
+                                ? 'Invalid charge'
+                                : null;
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove tier',
+                        onPressed: tiers.length == 1
+                            ? null
+                            : () => removeTier(entry.key),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: submit, child: const Text('Save charges')),
+    ],
+  );
+}
+
+class _FeeTierControllers {
+  _FeeTierControllers({required this.maxDistance, required this.fee});
+
+  factory _FeeTierControllers.fromTier(DeliveryFeeTier tier) =>
+      _FeeTierControllers(
+        maxDistance: TextEditingController(
+          text: tier.maxDistanceKm.toStringAsFixed(1),
+        ),
+        fee: TextEditingController(text: tier.fee.toStringAsFixed(2)),
+      );
+
+  final TextEditingController maxDistance;
+  final TextEditingController fee;
+
+  void dispose() {
+    maxDistance.dispose();
+    fee.dispose();
+  }
 }
 
 class _DeliveryZoneDialog extends StatefulWidget {

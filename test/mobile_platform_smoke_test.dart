@@ -70,7 +70,9 @@ void main() {
     addTearDown(api.close);
 
     await tester.pumpWidget(
-      MaterialApp(home: ShopPage(store: store, user: client)),
+      MaterialApp(
+        home: ShopPage(store: store, user: client),
+      ),
     );
 
     final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));

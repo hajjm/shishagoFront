@@ -87,7 +87,12 @@ class DeliveryZone {
 }
 
 class DeliveryAvailability {
-  const DeliveryAvailability({required this.available, this.zone});
+  const DeliveryAvailability({
+    required this.available,
+    this.zone,
+    this.distanceKm,
+    this.deliveryFee,
+  });
 
   factory DeliveryAvailability.fromJson(Map<String, dynamic> json) =>
       DeliveryAvailability(
@@ -95,10 +100,55 @@ class DeliveryAvailability {
         zone: json['zone'] == null
             ? null
             : DeliveryZone.fromJson(json['zone'] as Map<String, dynamic>),
+        distanceKm: (json['distance_km'] as num?)?.toDouble(),
+        deliveryFee: (json['delivery_fee'] as num?)?.toDouble(),
       );
 
   final bool available;
   final DeliveryZone? zone;
+  final double? distanceKm;
+  final double? deliveryFee;
+}
+
+class DeliveryFeeTier {
+  const DeliveryFeeTier({required this.maxDistanceKm, required this.fee});
+
+  factory DeliveryFeeTier.fromJson(Map<String, dynamic> json) =>
+      DeliveryFeeTier(
+        maxDistanceKm: (json['max_distance_km'] as num).toDouble(),
+        fee: (json['fee'] as num).toDouble(),
+      );
+
+  final double maxDistanceKm;
+  final double fee;
+
+  Map<String, dynamic> toJson() => {
+    'max_distance_km': maxDistanceKm,
+    'fee': fee,
+  };
+}
+
+class DeliveryPricing {
+  const DeliveryPricing({
+    required this.storeLatitude,
+    required this.storeLongitude,
+    required this.tiers,
+  });
+
+  factory DeliveryPricing.fromJson(Map<String, dynamic> json) =>
+      DeliveryPricing(
+        storeLatitude: (json['store_latitude'] as num).toDouble(),
+        storeLongitude: (json['store_longitude'] as num).toDouble(),
+        tiers: (json['tiers'] as List<dynamic>)
+            .map(
+              (tier) => DeliveryFeeTier.fromJson(tier as Map<String, dynamic>),
+            )
+            .toList(),
+      );
+
+  final double storeLatitude;
+  final double storeLongitude;
+  final List<DeliveryFeeTier> tiers;
 }
 
 class ProductCustomizationChoice {
@@ -391,6 +441,8 @@ class AppOrder {
     this.notes = '',
     this.rating,
     this.ratingComment,
+    this.deliveryFee = 0,
+    this.bringChange = false,
   });
 
   factory AppOrder.fromJson(Map<String, dynamic> json) => AppOrder(
@@ -406,6 +458,8 @@ class AppOrder {
     notes: json['notes'] as String? ?? '',
     rating: json['rating'] as int?,
     ratingComment: json['rating_comment'] as String?,
+    deliveryFee: (json['delivery_fee'] as num? ?? 0).toDouble(),
+    bringChange: json['bring_change'] as bool? ?? false,
     lines: (json['items'] as List<dynamic>)
         .map((item) => OrderLine.fromJson(item as Map<String, dynamic>))
         .toList(),
@@ -429,6 +483,8 @@ class AppOrder {
   final String notes;
   final int? rating;
   final String? ratingComment;
+  final double deliveryFee;
+  final bool bringChange;
   final List<OrderLine> lines;
   final double total;
   final OrderStage stage;

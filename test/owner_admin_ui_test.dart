@@ -30,6 +30,7 @@ AppOrder assignedOrder({
   required OrderStage stage,
   int? rating,
   String? ratingComment,
+  bool bringChange = false,
 }) => AppOrder(
   id: id,
   reference: reference,
@@ -47,6 +48,7 @@ AppOrder assignedOrder({
   longitude: 35.50,
   rating: rating,
   ratingComment: ratingComment,
+  bringChange: bringChange,
 );
 
 void main() {
@@ -123,6 +125,33 @@ void main() {
 
     expect(find.text('4/5'), findsOneWidget);
     expect(find.text('Very good delivery'), findsOneWidget);
+  });
+
+  testWidgets('owner sees configured distance delivery charges', (
+    tester,
+  ) async {
+    final store = createStore()
+      ..deliveryPricing = const DeliveryPricing(
+        storeLatitude: 33.8938,
+        storeLongitude: 35.5018,
+        tiers: [
+          DeliveryFeeTier(maxDistanceKm: 2, fee: 2),
+          DeliveryFeeTier(maxDistanceKm: 5, fee: 3),
+        ],
+      );
+    addTearDown(store.dispose);
+    addTearDown(store.api.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OwnerDeliveryZonesPage(store: store)),
+      ),
+    );
+
+    expect(find.text('Distance-based delivery charges'), findsOneWidget);
+    expect(find.text('Up to 2.0 km · \$2.00'), findsOneWidget);
+    expect(find.text('Up to 5.0 km · \$3.00'), findsOneWidget);
+    expect(find.byTooltip('Edit delivery charges'), findsOneWidget);
   });
 
   testWidgets('catalog price accepts digits and two decimal places only', (
@@ -372,6 +401,7 @@ void main() {
         clientName: 'Collection Client',
         clientPhone: '+96170000003',
         stage: OrderStage.finishedUsing,
+        bringChange: true,
       ),
       assignedOrder(
         id: '1',
@@ -404,6 +434,7 @@ void main() {
     expect(find.text('Shisha ready for collection'), findsOneWidget);
     expect(find.text('+96170000003'), findsOneWidget);
     expect(find.text('DELIVERY DETAILS'), findsOneWidget);
+    expect(find.text('CLIENT REQUESTED CHANGE'), findsOneWidget);
     expect(find.text('Open in Google Maps'), findsOneWidget);
     expect(find.text('Mark as collected'), findsOneWidget);
     expect(driverLocationUpdateInterval, const Duration(seconds: 10));

@@ -770,6 +770,16 @@ class OrdersPage extends StatelessWidget {
                       ],
                       const SizedBox(height: 12),
                       Text(order.items),
+                      if (order.bringChange) ...[
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Driver requested to bring change',
+                          style: TextStyle(
+                            color: AppColors.ember,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       Row(
                         children: [

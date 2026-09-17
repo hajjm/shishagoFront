@@ -98,6 +98,18 @@ class ShishaGoApi {
   Future<List<Map<String, dynamic>>> getDeliveryZones() =>
       _listRequest('GET', '/delivery-zones', authenticated: true);
 
+  Future<Map<String, dynamic>> getDeliveryPricing() =>
+      _mapRequest('GET', '/delivery-pricing', authenticated: true);
+
+  Future<Map<String, dynamic>> updateDeliveryPricing(
+    Map<String, dynamic> payload,
+  ) => _mapRequest(
+    'PUT',
+    '/delivery-pricing',
+    authenticated: true,
+    body: payload,
+  );
+
   Future<Map<String, dynamic>> checkDeliveryAvailability({
     required double latitude,
     required double longitude,
@@ -168,6 +180,7 @@ class ShishaGoApi {
     required double longitude,
     String? deliveryLocationId,
     String notes = '',
+    bool bringChange = false,
   }) => _mapRequest(
     'POST',
     '/orders',
@@ -179,6 +192,7 @@ class ShishaGoApi {
       'delivery_longitude': longitude,
       'delivery_location_id': deliveryLocationId,
       'notes': notes,
+      'bring_change': bringChange,
     },
   );
 

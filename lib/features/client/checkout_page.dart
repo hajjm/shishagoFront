@@ -19,11 +19,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final notesController = TextEditingController();
   String? selectedLocationId;
   bool submitting = false;
+  bool bringChange = false;
+  bool loadingQuote = false;
+  DeliveryAvailability? deliveryQuote;
+  String? quoteError;
 
   @override
   void initState() {
     super.initState();
     _selectInitialLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) => refreshDeliveryQuote());
   }
 
   void _selectInitialLocation() {
@@ -43,9 +48,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return null;
   }
 
-  DeliveryZone? get selectedDeliveryZone {
+  Future<void> refreshDeliveryQuote() async {
     final location = selectedLocation;
-    return location == null ? null : widget.store.deliveryZoneFor(location);
+    if (location == null) {
+      if (mounted) setState(() => deliveryQuote = null);
+      return;
+    }
+    final locationId = location.id;
+    setState(() {
+      loadingQuote = true;
+      quoteError = null;
+      deliveryQuote = null;
+    });
+    try {
+      final result = await widget.store.checkDeliveryAvailability(location);
+      if (!mounted || selectedLocationId != locationId) return;
+      setState(() => deliveryQuote = result);
+    } catch (error) {
+      if (!mounted || selectedLocationId != locationId) return;
+      setState(() => quoteError = error.toString());
+    } finally {
+      if (mounted && selectedLocationId == locationId) {
+        setState(() => loadingQuote = false);
+      }
+    }
   }
 
   @override
@@ -58,6 +84,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     final location = await showAddDeliveryLocation(context, widget.store);
     if (location != null && mounted) {
       setState(() => selectedLocationId = location.id);
+      await refreshDeliveryQuote();
     }
   }
 
@@ -83,6 +110,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     await widget.store.deleteSavedLocation(location);
     if (!mounted) return;
     setState(_selectInitialLocation);
+    await refreshDeliveryQuote();
   }
 
   Future<void> placeOrder() async {
@@ -108,6 +136,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         );
         return;
       }
+      setState(() => deliveryQuote = availability);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -122,7 +151,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         title: const Text('Confirm delivery location'),
         content: Text(
           'Are you sure you want this Shisha Go order sent to '
-          '${location.label} — ${location.address}?',
+          '${location.label} — ${location.address}?'
+          '${bringChange ? '\n\nThe driver will be told to bring change.' : ''}',
         ),
         actions: [
           TextButton(
@@ -142,6 +172,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       final order = await widget.store.checkout(
         location: location,
         notes: notesController.text.trim(),
+        bringChange: bringChange,
       );
       if (mounted) Navigator.pop(context, order);
     } catch (error) {
@@ -227,7 +258,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   : null,
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),
-                onTap: () => setState(() => selectedLocationId = location.id),
+                onTap: () async {
+                  setState(() => selectedLocationId = location.id);
+                  await refreshDeliveryQuote();
+                },
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Row(
@@ -334,31 +368,49 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ),
             const SizedBox(height: 6),
             Card(
-              color: selectedDeliveryZone == null
-                  ? Colors.red.withValues(alpha: 0.08)
-                  : Colors.green.withValues(alpha: 0.08),
+              color: deliveryQuote?.available == true
+                  ? Colors.green.withValues(alpha: 0.08)
+                  : Colors.red.withValues(alpha: 0.08),
               child: ListTile(
                 dense: true,
                 leading: Icon(
-                  selectedDeliveryZone == null
-                      ? Icons.location_off_rounded
-                      : Icons.check_circle_rounded,
-                  color: selectedDeliveryZone == null
-                      ? Colors.red
-                      : Colors.green,
+                  deliveryQuote?.available == true
+                      ? Icons.check_circle_rounded
+                      : loadingQuote
+                      ? Icons.hourglass_top_rounded
+                      : Icons.location_off_rounded,
+                  color: deliveryQuote?.available == true
+                      ? Colors.green
+                      : Colors.red,
                 ),
                 title: Text(
-                  selectedDeliveryZone == null
-                      ? 'Outside the current delivery area'
-                      : 'Delivery available in ${selectedDeliveryZone!.name}',
+                  loadingQuote
+                      ? 'Calculating delivery charge…'
+                      : deliveryQuote?.available == true
+                      ? 'Delivery available in ${deliveryQuote!.zone!.name}'
+                      : 'Outside the current delivery or pricing area',
                 ),
-                subtitle: const Text(
-                  'Confirm that this pin is your intended delivery point.',
+                subtitle: Text(
+                  quoteError ??
+                      (deliveryQuote?.available == true
+                          ? '${deliveryQuote!.distanceKm!.toStringAsFixed(1)} km from the store · '
+                                '\$${deliveryQuote!.deliveryFee!.toStringAsFixed(2)} delivery'
+                          : 'Choose a different delivery point.'),
                 ),
               ),
             ),
           ],
           const SizedBox(height: 18),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: bringChange,
+            onChanged: (value) => setState(() => bringChange = value ?? false),
+            title: const Text('Ask the driver to bring change'),
+            subtitle: const Text(
+              'Select this if you will pay cash and need change.',
+            ),
+            secondary: const Icon(Icons.payments_outlined),
+          ),
           TextField(
             controller: notesController,
             maxLength: 500,
@@ -374,11 +426,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
               child: Column(
                 children: [
                   _PriceRow(label: 'Items', value: widget.store.cartTotal),
-                  const _PriceRow(label: 'Delivery', value: 2),
+                  _PriceRow(
+                    label: 'Delivery',
+                    value: deliveryQuote?.deliveryFee ?? 0,
+                  ),
                   const Divider(height: 24),
                   _PriceRow(
                     label: 'Total',
-                    value: widget.store.cartTotal + 2,
+                    value:
+                        widget.store.cartTotal +
+                        (deliveryQuote?.deliveryFee ?? 0),
                     emphasized: true,
                   ),
                 ],
@@ -389,8 +446,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
           FilledButton.icon(
             onPressed:
                 submitting ||
+                    loadingQuote ||
                     selectedLocation == null ||
-                    selectedDeliveryZone == null
+                    deliveryQuote?.available != true
                 ? null
                 : placeOrder,
             icon: submitting
@@ -398,10 +456,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.check_circle_outline_rounded),
-            label: const Text('Confirm order'),
+                : const Icon(Icons.check_circle_rounded),
+            label: Text(submitting ? 'Placing order…' : 'Confirm order'),
           ),
-          const SizedBox(height: 30),
         ],
       ),
     ),
