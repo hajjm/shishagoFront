@@ -88,6 +88,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
+  Future<void> editLocation(SavedLocation existing) async {
+    final location = await showEditDeliveryLocation(
+      context,
+      widget.store,
+      existing,
+    );
+    if (location != null && mounted) {
+      setState(() => selectedLocationId = location.id);
+      await refreshDeliveryQuote();
+    }
+  }
+
   Future<void> removeLocation(SavedLocation location) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -299,13 +311,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       ),
                       PopupMenuButton<String>(
                         onSelected: (action) async {
-                          if (action == 'default') {
+                          if (action == 'edit') {
+                            await editLocation(location);
+                          } else if (action == 'default') {
                             await widget.store.setDefaultLocation(location);
                           } else if (action == 'delete') {
                             await removeLocation(location);
                           }
                         },
                         itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.edit_location_alt_outlined),
+                              title: Text('Edit location'),
+                            ),
+                          ),
                           if (!location.isDefault)
                             const PopupMenuItem(
                               value: 'default',
@@ -499,10 +521,20 @@ Future<SavedLocation?> showAddDeliveryLocation(
   builder: (_) => _AddDeliveryLocationDialog(store: store),
 );
 
+Future<SavedLocation?> showEditDeliveryLocation(
+  BuildContext context,
+  ShishaGoStore store,
+  SavedLocation location,
+) => showDialog<SavedLocation>(
+  context: context,
+  builder: (_) => _AddDeliveryLocationDialog(store: store, existing: location),
+);
+
 class _AddDeliveryLocationDialog extends StatefulWidget {
-  const _AddDeliveryLocationDialog({required this.store});
+  const _AddDeliveryLocationDialog({required this.store, this.existing});
 
   final ShishaGoStore store;
+  final SavedLocation? existing;
 
   @override
   State<_AddDeliveryLocationDialog> createState() =>
@@ -519,15 +551,28 @@ class _AddDeliveryLocationDialogState
   bool saving = false;
   late bool makeDefault;
   String? error;
+  GoogleMapController? mapController;
 
   @override
   void initState() {
     super.initState();
-    makeDefault = widget.store.savedLocations.isEmpty;
+    final existing = widget.existing;
+    if (existing == null) {
+      makeDefault = widget.store.savedLocations.isEmpty;
+    } else {
+      labelController.text = existing.label;
+      addressController.text = existing.address;
+      coordinates = CapturedLocation(
+        latitude: existing.latitude,
+        longitude: existing.longitude,
+      );
+      makeDefault = existing.isDefault;
+    }
   }
 
   @override
   void dispose() {
+    mapController?.dispose();
     labelController.dispose();
     addressController.dispose();
     super.dispose();
@@ -542,6 +587,9 @@ class _AddDeliveryLocationDialogState
       final value = await const DeviceLocationService().captureCurrent();
       if (!mounted) return;
       setState(() => coordinates = value);
+      await mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(value.latitude, value.longitude), 16),
+      );
     } catch (exception) {
       if (!mounted) return;
       setState(() => error = exception.toString());
@@ -554,7 +602,9 @@ class _AddDeliveryLocationDialogState
     if (!(formKey.currentState?.validate() ?? false)) return;
     final selectedCoordinates = coordinates;
     if (selectedCoordinates == null) {
-      setState(() => error = 'Capture the GPS position for this address.');
+      setState(
+        () => error = 'Use your current position or select a pin on the map.',
+      );
       return;
     }
     setState(() {
@@ -562,13 +612,23 @@ class _AddDeliveryLocationDialogState
       error = null;
     });
     try {
-      final location = await widget.store.addSavedLocation(
-        label: labelController.text.trim(),
-        address: addressController.text.trim(),
-        latitude: selectedCoordinates.latitude,
-        longitude: selectedCoordinates.longitude,
-        isDefault: makeDefault,
-      );
+      final existing = widget.existing;
+      final location = existing == null
+          ? await widget.store.addSavedLocation(
+              label: labelController.text.trim(),
+              address: addressController.text.trim(),
+              latitude: selectedCoordinates.latitude,
+              longitude: selectedCoordinates.longitude,
+              isDefault: makeDefault,
+            )
+          : await widget.store.updateSavedLocation(
+              existing: existing,
+              label: labelController.text.trim(),
+              address: addressController.text.trim(),
+              latitude: selectedCoordinates.latitude,
+              longitude: selectedCoordinates.longitude,
+              isDefault: makeDefault,
+            );
       if (mounted) Navigator.pop(context, location);
     } catch (exception) {
       if (!mounted) return;
@@ -581,7 +641,11 @@ class _AddDeliveryLocationDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Add delivery location'),
+    title: Text(
+      widget.existing == null
+          ? 'Add delivery location'
+          : 'Edit delivery location',
+    ),
     content: SizedBox(
       width: 430,
       child: Form(
@@ -622,10 +686,88 @@ class _AddDeliveryLocationDialogState
                       : 'GPS captured — update',
                 ),
               ),
+              const SizedBox(height: 10),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Or tap the map to choose the exact delivery point',
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 230,
+                  child: GoogleMap(
+                    onMapCreated: (controller) => mapController = controller,
+                    initialCameraPosition: CameraPosition(
+                      target: coordinates == null
+                          ? const LatLng(33.8938, 35.5018)
+                          : LatLng(
+                              coordinates!.latitude,
+                              coordinates!.longitude,
+                            ),
+                      zoom: coordinates == null ? 12 : 16,
+                    ),
+                    mapToolbarEnabled: false,
+                    zoomControlsEnabled: false,
+                    myLocationButtonEnabled: false,
+                    onTap: (position) => setState(
+                      () => coordinates = CapturedLocation(
+                        latitude: position.latitude,
+                        longitude: position.longitude,
+                      ),
+                    ),
+                    markers: coordinates == null
+                        ? const <Marker>{}
+                        : {
+                            Marker(
+                              markerId: const MarkerId(
+                                'delivery-location-editor',
+                              ),
+                              draggable: true,
+                              onDragEnd: (position) => setState(
+                                () => coordinates = CapturedLocation(
+                                  latitude: position.latitude,
+                                  longitude: position.longitude,
+                                ),
+                              ),
+                              position: LatLng(
+                                coordinates!.latitude,
+                                coordinates!.longitude,
+                              ),
+                            ),
+                          },
+                    circles: widget.store.deliveryZones
+                        .where((zone) => zone.isActive)
+                        .map(
+                          (zone) => Circle(
+                            circleId: CircleId('editor-${zone.id}'),
+                            center: LatLng(
+                              zone.centerLatitude,
+                              zone.centerLongitude,
+                            ),
+                            radius: zone.radiusKm * 1000,
+                            fillColor: AppColors.ember.withValues(alpha: 0.08),
+                            strokeColor: AppColors.ember,
+                            strokeWidth: 2,
+                          ),
+                        )
+                        .toSet(),
+                  ),
+                ),
+              ),
               if (coordinates != null)
-                Text(
-                  coordinates!.label,
-                  style: const TextStyle(color: AppColors.muted),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Selected pin: ${coordinates!.label}',
+                    style: const TextStyle(color: AppColors.muted),
+                  ),
                 ),
               if (error != null)
                 Text(error!, style: const TextStyle(color: Colors.red)),

@@ -311,6 +311,27 @@ class ShishaGoStore extends ChangeNotifier {
     await refreshSavedLocations();
   }
 
+  Future<SavedLocation> updateSavedLocation({
+    required SavedLocation existing,
+    required String label,
+    required String address,
+    required double latitude,
+    required double longitude,
+    required bool isDefault,
+  }) async {
+    final location = SavedLocation.fromJson(
+      await api.updateSavedLocation(existing.id, {
+        'label': label,
+        'address': address,
+        'latitude': latitude,
+        'longitude': longitude,
+        'is_default': isDefault,
+      }),
+    );
+    await refreshSavedLocations();
+    return location;
+  }
+
   Future<void> deleteSavedLocation(SavedLocation location) async {
     await api.deleteSavedLocation(location.id);
     await refreshSavedLocations();

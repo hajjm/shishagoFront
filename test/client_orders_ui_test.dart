@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shishago/data/app_store.dart';
 import 'package:shishago/features/client/checkout_page.dart';
 import 'package:shishago/features/client/client_shell.dart';
@@ -197,6 +198,50 @@ void main() {
       find.widgetWithText(TextField, 'Address details'),
       'Hamra, Beirut',
     );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('editing a delivery address offers an exact map pin', (
+    tester,
+  ) async {
+    final api = ShishaGoApi(baseUrl: 'http://127.0.0.1:8001');
+    final store = ShishaGoStore(api: api, session: SessionController(api));
+    addTearDown(store.dispose);
+    addTearDown(api.close);
+    const location = SavedLocation(
+      id: 'home',
+      label: 'Home',
+      address: 'Hamra, Beirut',
+      latitude: 33.897,
+      longitude: 35.482,
+      isDefault: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () =>
+                  showEditDeliveryLocation(context, store, location),
+              child: const Text('Edit address'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Edit address'));
+    await tester.pump();
+    expect(find.text('Edit delivery location'), findsOneWidget);
+    expect(
+      find.text('Or tap the map to choose the exact delivery point'),
+      findsOneWidget,
+    );
+    expect(find.byType(GoogleMap), findsOneWidget);
+    expect(find.text('Selected pin: 33.897000, 35.482000'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
