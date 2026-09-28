@@ -1,4 +1,4 @@
 import 'bootstrap.dart';
 import 'config/app_environment.dart';
 
-void main() => bootstrap(AppEnvironment.dev);
+Future<void> main() => bootstrap(AppEnvironment.dev);

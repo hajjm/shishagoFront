@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "117391631313",
+    "project_id": "shishago-6a5cd",
+    "storage_bucket": "shishago-6a5cd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:117391631313:android:2e2c8b915c47a33e7276f0",
+        "android_client_info": {
+          "package_name": "com.shishago.app.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpygMkQaPN4URrKeqg9CtFHpjqkbo14ZY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
