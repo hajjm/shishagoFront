@@ -9,8 +9,9 @@ import 'firebase_options.dart';
 Future<void> bootstrap(AppEnvironment environment) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS) {
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS)) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
